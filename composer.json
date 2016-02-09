@@ -1,0 +1,20 @@
+{
+  "name": "vkoptev/olap",
+  "license": "MIT",
+  "version": "1.0.0",
+  "autoload": {
+    "psr-4" : {
+      "OLAP\\" : "src/OLAP"
+    }
+  },
+  "require": {
+    "php": ">=5.5.0",
+    "doctrine/dbal": "2.3.5"
+  },
+  "repositories": [
+    {
+      "type": "git",
+      "url": "https://github.com/VKoptev/olap.git"
+    }
+  ]
+}
