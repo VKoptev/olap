@@ -42,4 +42,19 @@ class Dimension {
 
         return empty($this->options['index']) ? 'hash' : $this->options['index'];
     }
+
+    /**
+     * Return dimension value
+     * @param array $data
+     * @param array $map [dimension_name => data_key]
+     * @return mixed
+     */
+    public function getData(array $data, array $map = []) {
+
+        $key = $this->name;
+        if (!empty($map[$key])) {
+            $key = $map[$key];
+        }
+        return array_key_exists($key, $data) ? $data[$key] : null;
+    }
 }

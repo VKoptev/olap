@@ -6,15 +6,12 @@ namespace OLAP;
 class Type {
 
     private $type = '';
-    private $create = '';
-    private $using = '';
+    private $options = [];
 
     public function __construct($options) {
 
         $this->type = is_string($options) ? $options : (empty($options['name']) ? 'text' : $options['name']);
-        foreach (['using', 'create'] as $field) {
-            $this->$field = empty($options[$field]) ? '' : $options[$field];
-        }
+        $this->options = is_array($options) ? array_diff_key($options, array_flip(['name'])) : [];
     }
 
     public function getType() {
@@ -24,11 +21,16 @@ class Type {
 
     public function getCreation() {
 
-        return $this->create;
+        return $this->getOption('create');
     }
 
     public function getUsing() {
 
-        return $this->using;
+        return $this->getOption('using');
+    }
+
+    protected function getOption($name) {
+
+        return empty($this->options[$name]) ? '' : $this->options[$name];
     }
 }
