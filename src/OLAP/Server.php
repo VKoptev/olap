@@ -10,49 +10,41 @@ class Server {
      * @var Connection
      */
     private $db;
-    /**
-     * @var Dimension[]
-     */
-    private $dimensions = [];
 
     /**
-     * @var Type
+     * @var Cube
      */
-    private $dataType;
+    private $cube;
 
 
-    public function __construct(Connection $connection, $dimensions = [], $dataType = []) {
+    public function __construct(Connection $connection, Cube $cube) {
 
         $this->db = $connection;
-        foreach ($dimensions as $dimension) {
-            if (is_array($dimension) && !empty($dimension['name']) && !empty($dimension['type'])) {
-                $dimension = new Dimension(
-                    $dimension['name'],
-                    $dimension['type'],
-                    array_diff_key( $dimension, array_flip(['name', 'type']) )
-                );
-            }
-            if ($dimension instanceof Dimension) {
-                $this->dimensions[strtolower($dimension->getName())] = $dimension;
-            }
-        }
-        $this->dataType = $dataType instanceof Type ? $dataType : new Type($dataType);
+        $this->cube = $cube;
     }
 
     public function checkStructure() {
 
         // check dimensions
         $sql = [];
-        foreach ($this->dimensions as $dimensionName => $dimension) {
+        $dimensions = $this->cube->getDimensions();
+        foreach ($dimensions as $dimensionName => $dimension) {
             $sql[] = "to_regclass('public.$dimensionName')" . ' as ' . $dimensionName;
         }
         $result = $this->db->query("SELECT " . implode(', ', $sql))->fetch();
         foreach ($result as $dimensionName => $exists) {
             if ($exists) {
-                $this->checkDimension($this->dimensions[$dimensionName]);
+                $this->checkDimension($dimensions[$dimensionName]);
             } else {
-                $this->createDimension($this->dimensions[$dimensionName]);
+                $this->createDimension($dimensions[$dimensionName]);
             }
+        }
+
+        // check facts
+        $facts = strtolower($this->cube->getName());
+        $result = $this->db->fetchColumn("SELECT to_regclass('public.$facts')");
+        if (!$result) {
+            $this->createFacts();
         }
     }
 
@@ -63,8 +55,8 @@ class Server {
         $this->checkType($type);
         $data = '';
         if ($dimension->isDenormalized()) {
-            $this->checkType($this->dataType);
-            $data = 'data ' . $this->dataType->getType() . ',';
+            $this->checkType($this->cube->getDataType());
+            $data = 'data ' . $this->cube->getDataType()->getType() . ',';
         }
         $sql = <<<SQL
 CREATE TABLE public.$tableName (
@@ -78,7 +70,7 @@ WITH (
 );
 CREATE INDEX {$tableName}_value_idx
   ON public.{$tableName}
-  USING hash
+  USING {$dimension->getIndex()}
   (value);
 SQL;
 
@@ -88,7 +80,22 @@ SQL;
 
     private function checkDimension(Dimension $dimension) {
 
+        $dimensionName = strtolower($dimension->getName());
+        $columns = [];
+        foreach ($this->db->fetchAll(
+            "SELECT column_name, data_type, udt_name FROM information_schema.columns WHERE table_name = :tblname",
+            [':tblname' => $dimensionName]) as $row) {
 
+            $columns[$row['column_name']] = strtolower($row['data_type']) === 'user-defined' ? $row['udt_name'] : $row['data_type'];
+        }
+        if ($dimension->getType()->getType() != $columns['value']) {
+            $this->checkType($dimension->getType());
+            // simple switch type; but it may be unavailable
+            $using = $dimension->getType()->getUsing();
+            $using = $using ? "USING $using" : '';
+            $this->db->exec("ALTER TABLE public.$dimensionName ALTER COLUMN value TYPE " . $dimension->getType()->getType() . " $using");
+        }
+         // todo: changing index of value and changing data type
     }
 
     private function checkType(Type $type) {
@@ -97,5 +104,36 @@ SQL;
         if (!$exists && $creation = $type->getCreation()) {
             $this->db->exec($creation);
         }
+    }
+
+    private function createFacts() {
+
+        $this->checkType($this->cube->getDataType());
+
+        $tableName = strtolower($this->cube->getName());
+        $names = array_keys($this->cube->getDimensions());
+        $fields = implode("_id integer,\n", $names) . '_id integer';
+        $pk = implode('_id, ', $names) . '_id';
+        $constraints = [];
+        foreach ($names as $name) {
+            $constraints[] = "CONSTRAINT {$tableName}_{$name}_id_fkey FOREIGN KEY ({$name}_id) " .
+                             "REFERENCES {$name} (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION";
+        }
+        $constraints = $constraints ? ',' . implode(',', $constraints) : '';
+
+        $data = 'data ' . $this->cube->getDataType()->getType();
+        $sql = <<<SQL
+CREATE TABLE public.$tableName (
+  $fields,
+  $data,
+  CONSTRAINT {$tableName}_pkey PRIMARY KEY ($pk)
+  $constraints
+
+)
+WITH (
+  OIDS=FALSE
+);
+SQL;
+        $this->db->exec($sql);
     }
 }

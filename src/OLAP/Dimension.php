@@ -37,4 +37,9 @@ class Dimension {
 
         return !empty($this->options['denormalized']);
     }
+
+    public function getIndex() {
+
+        return empty($this->options['index']) ? 'hash' : $this->options['index'];
+    }
 }

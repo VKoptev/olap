@@ -7,11 +7,14 @@ class Type {
 
     private $type = '';
     private $create = '';
+    private $using = '';
 
     public function __construct($options) {
 
         $this->type = is_string($options) ? $options : (empty($options['name']) ? 'text' : $options['name']);
-        $this->create = empty($options['create']) ? '' : $options['create'];
+        foreach (['using', 'create'] as $field) {
+            $this->$field = empty($options[$field]) ? '' : $options[$field];
+        }
     }
 
     public function getType() {
@@ -22,5 +25,10 @@ class Type {
     public function getCreation() {
 
         return $this->create;
+    }
+
+    public function getUsing() {
+
+        return $this->using;
     }
 }
