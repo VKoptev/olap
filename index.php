@@ -56,26 +56,31 @@ $db = \Doctrine\DBAL\DriverManager::getConnection([
 if (0) $db->getConfiguration()->setSQLLogger(new EchoSQLLogger());
 $cube = new \OLAP\Cube(
     'tracks',
-    [
-        [
+    [ // facts
+        'hour' => [
             'name' => 'hour',
-            'type' => 'timestamp without time zone',
-            'denormalized' => true,
-            'index' => 'btree'
-        ],
-        [
-            'name' => 'pid',
-            'type' => 'integer'
-        ],
-        [
-            'name' => 'supplier',
-            'type' => 'integer'
-        ],
-        [
-            'name' => 'offer',
-            'type' => 'integer',
-            'parent' => 'supplier',
-        ],
+            'dimensions' => [
+                [
+                    'name' => 'hour',
+                    'type' => 'timestamp without time zone',
+                    'denormalized' => true,
+                    'index' => 'btree'
+                ],
+                [
+                    'name' => 'pid',
+                    'type' => 'integer'
+                ],
+                [
+                    'name' => 'supplier',
+                    'type' => 'integer'
+                ],
+                [
+                    'name' => 'offer',
+                    'type' => 'integer',
+                    'parent' => 'supplier',
+                ],
+            ]
+        ]
     ],
     [
         'name' => 'info',

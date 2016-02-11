@@ -13,9 +13,9 @@ use Doctrine\DBAL\Connection;
 class Cube extends Base {
 
     /**
-     * @var Dimension[]
+     * @var Fact[]
      */
-    private $dimensions = [];
+    private $facts = [];
 
     /**
      * @var Type
@@ -31,19 +31,28 @@ class Cube extends Base {
 
         parent::__construct($db, $object, $sender);
 
-        $this->dimensions = [];
-        foreach ($this->object()->getDimensions() as $dimension) {
-            $this->dimensions[$dimension->getName()] = new Dimension($this->db(), $dimension, $this);
+        $this->facts = [];
+        foreach ($this->object()->getFacts() as $fact) {
+            $this->facts[$fact->getName()] = new Fact($this->db(), $fact, $this);
         }
         $this->dataType = new Type($this->db(), $this->object()->getDataType());
     }
 
     /**
-     * @return Dimension[]
+     * @return Fact[]
      */
-    public function getDimensions() {
+    public function getFacts() {
 
-        return $this->dimensions;
+        return $this->facts;
+    }
+
+    /**
+     * @param $name
+     * @return Fact
+     */
+    public function getFact($name) {
+
+        return empty($this->facts[$name]) ? false : $this->facts[$name];
     }
 
     /**
@@ -61,11 +70,9 @@ class Cube extends Base {
 
         $this->getDataType()->checkStructure();
 
-        foreach ($this->getDimensions() as $dimension) {
-            $dimension->checkStructure();
+        foreach ($this->getFacts() as $fact) {
+            $fact->checkStructure();
         }
-
-        parent::checkStructure();
     }
 
     /**
@@ -73,7 +80,7 @@ class Cube extends Base {
      */
     public function dataField() {
 
-        return 'data';
+        return $this->object()->dataField();
     }
 
     /**
@@ -81,41 +88,6 @@ class Cube extends Base {
      */
     public function valueField() {
 
-        return 'value';
-    }
-
-    /**
-     * @param $name
-     * @return Dimension
-     */
-    public function getDimension($name) {
-
-        return empty($this->dimensions[$name]) ? false : $this->dimensions[$name];
-    }
-
-    protected function createTable() {
-
-        $fields         = [
-            "id serial NOT NULL",
-            "{$this->dataField()} {$this->getDataType()->getTableName()}",
-        ];
-        $key            = [];
-        $constraints    = [
-            "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)"
-        ];
-        foreach ($this->getDimensions() as $dimension) {
-
-            $fields[]       = "{$dimension->getTableName()}_id integer";
-            $key[]          = "{$dimension->getTableName()}_id";
-            $constraints[]  = "CONSTRAINT {$this->getTableName()}_{$dimension->getTableName()}_id_fkey FOREIGN KEY ({$dimension->getTableName()}_id) " .
-                              "REFERENCES {$dimension->getTableName()} (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION";
-        }
-        $key = implode(",",   $key);
-        $constraints[] = "CONSTRAINT {$this->getTableName()}_unique UNIQUE ($key)";
-
-        $fields         = implode(",", $fields);
-        $constraints    = implode(",", $constraints);
-
-        $this->db()->exec("CREATE TABLE public.{$this->getTableName()} ($fields, $constraints) WITH(OIDS=FALSE);");
+        return $this->object()->valueField();
     }
 }

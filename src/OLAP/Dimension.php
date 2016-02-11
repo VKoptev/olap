@@ -2,7 +2,7 @@
 
 namespace OLAP;
 
-class Dimension implements Model {
+class Dimension extends Model {
 
     const PREFIX = 'dimension_';
 
@@ -11,9 +11,8 @@ class Dimension implements Model {
      * @var Type
      */
     private $type;
-    private $options = [];
 
-    public function __construct($name, $type, $options = []) {
+    public function __construct($name, $type, $options) {
 
         $this->name = $name;
         $this->type = $type instanceof Type ? $type : new Type($type);

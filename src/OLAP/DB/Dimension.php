@@ -8,7 +8,7 @@ use Doctrine\DBAL\Connection;
  * Class Dimension
  * @package OLAP\DB
  * @method \OLAP\Dimension object()
- * @method Cube sender()
+ * @method Fact sender()
  */
 class Dimension extends Base {
 
@@ -20,9 +20,9 @@ class Dimension extends Base {
     /**
      * @param Connection $db
      * @param mixed $object
-     * @param Cube $sender
+     * @param Fact $sender
      */
-    public function __construct(Connection $db, \OLAP\Dimension $object, Cube $sender = null) {
+    public function __construct(Connection $db, \OLAP\Dimension $object, Fact $sender = null) {
 
         parent::__construct($db, $object, $sender);
         $this->type = new Type($this->db(), $this->object()->getType(), $this);

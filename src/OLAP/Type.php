@@ -3,10 +3,9 @@
 namespace OLAP;
 
 
-class Type implements Model {
+class Type extends Model {
 
     private $name = '';
-    private $options = [];
 
     public function __construct($options) {
 
@@ -27,10 +26,5 @@ class Type implements Model {
     public function getUsing() {
 
         return $this->getOption('using');
-    }
-
-    protected function getOption($name) {
-
-        return empty($this->options[$name]) ? '' : $this->options[$name];
     }
 }
