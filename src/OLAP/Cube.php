@@ -3,7 +3,7 @@
 namespace OLAP;
 
 
-class Cube {
+class Cube implements Model {
 
     const PREFIX = 'facts_';
 

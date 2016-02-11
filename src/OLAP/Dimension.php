@@ -2,7 +2,7 @@
 
 namespace OLAP;
 
-class Dimension {
+class Dimension implements Model {
 
     const PREFIX = 'dimension_';
 

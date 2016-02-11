@@ -3,20 +3,20 @@
 namespace OLAP;
 
 
-class Type {
+class Type implements Model {
 
-    private $type = '';
+    private $name = '';
     private $options = [];
 
     public function __construct($options) {
 
-        $this->type = is_string($options) ? $options : (empty($options['name']) ? 'text' : $options['name']);
+        $this->name = is_string($options) ? $options : (empty($options['name']) ? 'text' : $options['name']);
         $this->options = is_array($options) ? array_diff_key($options, array_flip(['name'])) : [];
     }
 
-    public function getType() {
+    public function getName() {
 
-        return $this->type;
+        return $this->name;
     }
 
     public function getCreation() {
