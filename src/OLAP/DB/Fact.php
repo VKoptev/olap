@@ -88,13 +88,50 @@ class Fact extends Base {
 
     protected function createTable() {
 
+        list($fields, $constraints) = $this->getTableDefinition();
+
+        $fields         = implode(",", $fields);
+        $constraints    = implode(",", $constraints);
+
+        $this->db()->exec("CREATE TABLE public.{$this->getTableName()} ($fields, $constraints) WITH(OIDS=FALSE);");
+    }
+
+    protected function checkTable() {
+
+        list($fields, $constraints) = $this->getTableDefinition();
+        $table = $this->describeTable();
+
+        unset($fields['id'], $fields[$this->dataField()], $table['id'], $table[$this->dataField()]);
+
+        $map = array_keys($fields);
+        $map = array_combine(
+            $map,
+            array_map(function($e){
+                return $e . '_id';
+            }, $map)
+        );
+        $new = array_diff($map, array_keys($table));
+        $fields = array_intersect_key($fields, $new);
+        $constraints = array_intersect_key($constraints, $new);
+        if (!empty($fields)) {
+
+            $fields         = 'ADD COLUMN ' . implode(", ADD COLUMN ", $fields);
+            $constraints    = 'ADD ' . implode(", ADD ", $constraints);
+            $sql = "ALTER TABLE public.{$this->getTableName()} $fields, $constraints";
+            $this->db()->exec($sql);
+        }
+    }
+
+    private function getTableDefinition() {
+
+
         $fields         = [
-            "id serial NOT NULL",
-            "{$this->dataField()} {$this->getDataType()->getTableName()}",
+            'id' => "id serial NOT NULL",
+            $this->dataField() => "{$this->dataField()} {$this->getDataType()->getTableName()}",
         ];
         $key            = [];
         $constraints    = [
-            "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)"
+            'id' => "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)"
         ];
         $parents = [];
         foreach ($this->getDimensions() as $dimension) {
@@ -116,11 +153,8 @@ class Fact extends Base {
         }
 
         $key = implode(",",   $key);
-        $constraints[] = "CONSTRAINT {$this->getTableName()}_unique UNIQUE ($key)";
+        $constraints['unique'] = "CONSTRAINT {$this->getTableName()}_unique UNIQUE ($key)";
 
-        $fields         = implode(",", $fields);
-        $constraints    = implode(",", $constraints);
-
-        $this->db()->exec("CREATE TABLE public.{$this->getTableName()} ($fields, $constraints) WITH(OIDS=FALSE);");
+        return [$fields, $constraints];
     }
 }

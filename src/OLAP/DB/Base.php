@@ -83,6 +83,16 @@ abstract class Base {
             "REFERENCES {$table} (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION";
     }
 
+    protected function describeTable() {
+
+        $columns = [];
+        $cursor = $this->db()->fetchAll("SELECT column_name, data_type, udt_name FROM information_schema.columns WHERE table_name = :table", [':table' => $this->getTableName()]);
+        foreach ($cursor as $row) {
+            $columns[$row['column_name']] = strtolower($row['data_type']) === 'user-defined' ? $row['udt_name'] : $row['data_type'];
+        }
+        return $columns;
+    }
+
     protected function createTable() {
 
         // virtual
