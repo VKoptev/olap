@@ -41,27 +41,23 @@ class Dimension extends Base {
 
         $this->getType()->checkStructure();
 
-        $data = '';
+        $fields = [
+            "id serial NOT NULL",
+            "{$this->sender()->valueField()} {$this->getType()->getTableName()}"
+        ];
+        $constraints    = [
+            "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)"
+        ];
         if ($this->object()->isDenormalized()) {
-            $data = $this->sender()->dataField() . ' ' . $this->sender()->getDataType()->getTableName() . ',';
+            $fields[] = $this->sender()->dataField() . ' ' . $this->sender()->getDataType()->getTableName();
         }
+        $fields         = implode(",", $fields);
+        $constraints    = implode(",", $constraints);
 
-        $table = $this->getTableName();
-        $sql = <<<SQL
-CREATE TABLE public.{$table} (
-  id serial NOT NULL,
-  {$this->sender()->valueField()} {$this->getType()->getTableName()},
-  $data
-  CONSTRAINT {$table}_pkey PRIMARY KEY (id)
-)
-WITH (
-  OIDS=FALSE
-);
-CREATE INDEX {$table}_{$this->sender()->valueField()}_idx
-  ON public.{$table}
-  USING {$this->object()->getIndex()}
-  ({$this->sender()->valueField()});
-SQL;
+        $sql =  "CREATE TABLE public.{$this->getTableName()} ($fields, $constraints) WITH(OIDS=FALSE);" .
+                "CREATE INDEX {$this->getTableName()}_{$this->sender()->valueField()}_idx ON public.{$this->getTableName()} " .
+                    "USING {$this->object()->getIndex()}({$this->sender()->valueField()});"
+        ;
 
         $this->db()->exec($sql);
     }
