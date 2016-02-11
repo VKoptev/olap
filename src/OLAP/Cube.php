@@ -6,10 +6,6 @@ namespace OLAP;
 class Cube extends Model {
 
     /**
-     * @var string
-     */
-    private $name;
-    /**
      * @var Fact[]
      */
     private $facts = [];
@@ -28,15 +24,22 @@ class Cube extends Model {
 
         $this->name = $name;
         foreach ($facts as $fact) {
-            if (is_array($fact) && !empty($fact['name']) && !empty($fact['dimensions'])) {
-                $fact = new Fact(
-                    $fact['name'],
-                    $fact['dimensions'],
-                    array_merge(array_diff_key( $fact, array_flip(['name', 'dimensions']) ), ['cube_name' => $this->name])
-                );
+            if (is_array($fact) && !empty($fact['name'])) {
+                if (!empty($fact['dimensions'])) {
+                    $fact = new Fact(
+                        $fact['name'],
+                        $fact['dimensions'],
+                        array_merge(
+                            array_diff_key($fact, array_flip(['name', 'dimensions'])),
+                            ['cube_name' => $this->name]
+                        )
+                    );
+                } elseif (!empty($fact['special'])) {
+                    $fact = $this->getSpecialFact($fact);
+                }
             }
             if ($fact instanceof Fact) {
-                $this->facts[strtolower($fact->getName())] = $fact;
+                $this->facts[$fact->getName()] = $fact;
             } else {
                 throw new Exception('Bad cube format');
             }
@@ -53,14 +56,6 @@ class Cube extends Model {
     public function valueField() {
 
         return $this->getOption('value_field', 'value');
-    }
-
-    /**
-     * @return string
-     */
-    public function getName() {
-
-        return self::PREFIX . $this->name;
     }
 
     /**
@@ -86,6 +81,18 @@ class Cube extends Model {
     public function getDataType() {
 
         return $this->dataType;
+    }
+
+    protected function getSpecialFact($fact) {
+
+        $class = __NAMESPACE__ . '\\SpecialFact\\' . ucfirst($fact['special']);
+        return new $class(
+            $fact['name'],
+            array_merge(
+                array_diff_key($fact, array_flip(['name', 'special'])),
+                ['cube_name' => $this->name]
+            )
+        );
     }
 
 //    public function getSetter(array $data) {

@@ -76,6 +76,13 @@ abstract class Base {
         return (bool)$this->db()->fetchColumn("SELECT to_regclass('public.$table')");
     }
 
+    protected function getFK($table) {
+
+        return
+            "CONSTRAINT {$this->getTableName()}_{$table}_id_fkey FOREIGN KEY ({$table}_id) " .
+            "REFERENCES {$table} (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION";
+    }
+
     protected function createTable() {
 
         // virtual

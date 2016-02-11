@@ -64,23 +64,81 @@ $cube = new \OLAP\Cube(
                     'name' => 'hour',
                     'type' => 'timestamp without time zone',
                     'denormalized' => true,
-                    'index' => 'btree'
+                    'index' => 'btree',
                 ],
                 [
                     'name' => 'pid',
-                    'type' => 'integer'
+                    'type' => 'integer',
                 ],
                 [
                     'name' => 'supplier',
-                    'type' => 'integer'
+                    'type' => 'integer',
                 ],
                 [
                     'name' => 'offer',
                     'type' => 'integer',
                     'parent' => 'supplier',
                 ],
+                [
+                    'name' => 'country',
+                    'type' => 'character varying(5)',
+                ],
+                [
+                    'name' => 'city_id',
+                    'type' => 'integer',
+                    'parent' => 'country',
+                ],
+                [
+                    'name' => 'os',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'browser',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'device',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'device_model',
+                    'type' => 'character varying(255)',
+                    'parent' => 'device',
+                ],
             ]
-        ]
+        ],
+        'date' => [
+            'name' => 'date',
+            'special' => 'timezone',
+            'parent' => 'hour',
+            'dimension' => 'hour',
+        ],
+        'sub_hour' => [
+            'name' => 'sub_hour',
+            'parent' => 'hour',
+            'dimensions' => [
+                [
+                    'name' => 'sub1',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'sub2',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'sub3',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'sub4',
+                    'type' => 'character varying(255)',
+                ],
+                [
+                    'name' => 'sub5',
+                    'type' => 'character varying(255)',
+                ],
+            ],
+        ],
     ],
     [
         'name' => 'info',
@@ -101,23 +159,47 @@ $server->checkStructure();
 //$db = $mongo->selectDB('admin');
 //$tracks = $db->tracks;
 //
-//$pipeline = [
-//    ['$match' => []],
-//    ['$group' => [
-//        '_id' => [
-//            'createdAt' => ['$dateToString' => ['format' => '%Y-%m-%d %H:00:00', 'date' => '$createdAt']],
-//            'pid' => '$pid',
-//        ],
-//        'raw' => ['$sum' => '$count'],
-//        'uniq' => ['$sum' => 1],
-//    ]],
-//    ['$project' => [
-//        'createdAt' => '$_id.createdAt',
-//        'pid' => '$_id.pid',
-//        'raw' => '$raw',
-//        'uniq' => '$uniq',
-//    ]]
-//];
+$pipeline = [
+    ['$match' => []],
+    ['$group' => [
+        '_id' => [
+            'createdAt' => ['$dateToString' => ['format' => '%Y-%m-%d %H:00:00', 'date' => '$createdAt']],
+            'pid' => '$pid',
+            'supplier' => '$supplier',
+            'offer' => '$programId',
+            'country' => '$country',
+            'city_id' => '$city_id',
+            'os'   => '$track_info.os.family',
+            'browser'   => '$track_info.browser.family',
+            'device'   => '$track_info.device.family',
+            'device_model' => '$track_info.device.model',
+            'sub1'   => '$sub',
+            'sub2'   => '$sub2',
+            'sub3'   => '$sub3',
+            'sub4'   => '$sub4',
+            'sub5'   => '$sub5',
+        ],
+        'raw' => ['$sum' => '$count'],
+        'uniq' => ['$sum' => 1],
+    ]],
+    ['$project' => [
+        'createdAt' => '$_id.createdAt',
+        'pid' => '$_id.pid',
+        'raw' => '$raw',
+        'uniq' => '$uniq',
+        'country' => '$country',
+        'city_id' => '$city_id',
+        'os' => '$os',
+        'browser' => '$browser',
+        'device' => '$device',
+        'device_model' => '$device_model',
+        'sub1' => '$sub1',
+        'sub2' => '$sub2',
+        'sub3' => '$sub3',
+        'sub4' => '$sub4',
+        'sub5' => '$sub5',
+    ]]
+];
 //for ($i = -450; $i < 0; $i++){
 //    $start  = strtotime(date('Y-m-d 00:00:00', strtotime($i . 'days')));
 //    $end    = strtotime(date('Y-m-d 00:00:00', strtotime(($i + 1) . 'days')));

@@ -6,7 +6,6 @@ class Dimension extends Model {
 
     const PREFIX = 'dimension_';
 
-    private $name;
     /**
      * @var Type
      */
@@ -17,11 +16,6 @@ class Dimension extends Model {
         $this->name = $name;
         $this->type = $type instanceof Type ? $type : new Type($type);
         $this->options = $options ?: [];
-    }
-
-    public function getName() {
-
-        return $this->makeName($this->name);
     }
 
     /**
@@ -62,7 +56,7 @@ class Dimension extends Model {
         return array_key_exists($key, $data) ? $data[$key] : null;
     }
 
-    private function makeName($name) {
+    protected function makeName($name) {
 
         return self::PREFIX . $name;
     }

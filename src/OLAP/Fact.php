@@ -8,10 +8,6 @@ class Fact extends Model {
     const PREFIX = 'fact_';
 
     /**
-     * @var string
-     */
-    private $name;
-    /**
      * @var Dimension[]
      */
     private $dimensions = [];
@@ -42,14 +38,6 @@ class Fact extends Model {
     }
 
     /**
-     * @return string
-     */
-    public function getName() {
-
-        return self::PREFIX . $this->getOption('cube_name', 'cube') . '_' . $this->name;
-    }
-
-    /**
      * @return Dimension[]
      */
     public function getDimensions() {
@@ -72,5 +60,16 @@ class Fact extends Model {
     public function getDataType() {
 
         return $this->dataType;
+    }
+
+    public function getParent() {
+
+        $parent = $this->getOption('parent', null);
+        return $parent ? $this->makeName($parent) : null;
+    }
+
+    protected function makeName($name) {
+
+        return self::PREFIX . $this->getOption('cube_name', 'cube') . '_' . $name;
     }
 }

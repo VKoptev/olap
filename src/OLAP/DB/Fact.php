@@ -101,9 +101,7 @@ class Fact extends Base {
 
             $fields[$dimension->getTableName()]       = "{$dimension->getTableName()}_id integer";
             $key[$dimension->getTableName()]          = "{$dimension->getTableName()}_id";
-            $constraints[$dimension->getTableName()]  =
-                "CONSTRAINT {$this->getTableName()}_{$dimension->getTableName()}_id_fkey FOREIGN KEY ({$dimension->getTableName()}_id) " .
-                "REFERENCES {$dimension->getTableName()} (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION";
+            $constraints[$dimension->getTableName()]  = $this->getFK($dimension->getTableName());
             if ($parent = $dimension->object()->getParent()) {
                 $parents[$parent] = true;
             }
@@ -111,6 +109,11 @@ class Fact extends Base {
         $fields         = array_diff_key($fields, $parents);
         $key            = array_diff_key($key, $parents);
         $constraints    = array_diff_key($constraints, $parents);
+
+        if (($parent = $this->object()->getParent()) && ($parent = $this->sender()->getFact($parent))) {
+            $fields[$parent->getTableName()] = "{$parent->getTableName()}_id integer";
+            $constraints[$parent->getTableName()]  = $this->getFK($parent->getTableName());
+        }
 
         $key = implode(",",   $key);
         $constraints[] = "CONSTRAINT {$this->getTableName()}_unique UNIQUE ($key)";

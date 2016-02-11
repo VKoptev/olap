@@ -53,9 +53,8 @@ class Dimension extends Base {
         }
         if ($parent = $this->object()->getParent()) {
             $parent = $this->sender()->getDimension($parent);
-            $fields[] = "{$parent->getTableName()}_id {$parent->getType()->getTableName()}";
-            $constraints[] = "CONSTRAINT {$this->getTableName()}_{$parent->getTableName()}_id_fkey FOREIGN KEY ({$parent->getTableName()}_id) " .
-                             "REFERENCES {$parent->getTableName()} (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION";
+            $fields[] = "{$parent->getTableName()}_id integer";
+            $constraints[] = $this->getFK($parent->getTableName());
         }
         $fields         = implode(",", $fields);
         $constraints    = implode(",", $constraints);
