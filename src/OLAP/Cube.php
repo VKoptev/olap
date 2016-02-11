@@ -71,6 +71,15 @@ class Cube implements Model {
     }
 
     /**
+     * @param $name
+     * @return Dimension
+     */
+    public function getDimension($name) {
+
+        return empty($this->dimensions[$name]) ? false : $this->dimensions[$name];
+    }
+
+    /**
      * @return Type
      */
     public function getDataType() {

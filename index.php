@@ -67,6 +67,15 @@ $cube = new \OLAP\Cube(
             'name' => 'pid',
             'type' => 'integer'
         ],
+        [
+            'name' => 'supplier',
+            'type' => 'integer'
+        ],
+        [
+            'name' => 'offer',
+            'type' => 'integer',
+            'parent' => 'supplier',
+        ],
     ],
     [
         'name' => 'info',

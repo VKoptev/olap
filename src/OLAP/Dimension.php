@@ -22,7 +22,7 @@ class Dimension implements Model {
 
     public function getName() {
 
-        return self::PREFIX . $this->name;
+        return $this->makeName($this->name);
     }
 
     /**
@@ -36,6 +36,11 @@ class Dimension implements Model {
     public function isDenormalized() {
 
         return !empty($this->options['denormalized']);
+    }
+
+    public function getParent() {
+
+        return empty($this->options['parent']) ? null : $this->makeName($this->options['parent']);
     }
 
     public function getIndex() {
@@ -56,5 +61,10 @@ class Dimension implements Model {
             $key = $map[$key];
         }
         return array_key_exists($key, $data) ? $data[$key] : null;
+    }
+
+    private function makeName($name) {
+
+        return self::PREFIX . $name;
     }
 }

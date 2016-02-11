@@ -54,6 +54,9 @@ class Cube extends Base {
         return $this->dataType;
     }
 
+    /**
+     * Check structure of cube
+     */
     public function checkStructure() {
 
         $this->getDataType()->checkStructure();
@@ -65,14 +68,29 @@ class Cube extends Base {
         parent::checkStructure();
     }
 
+    /**
+     * @return string
+     */
     public function dataField() {
 
         return 'data';
     }
 
+    /**
+     * @return string
+     */
     public function valueField() {
 
         return 'value';
+    }
+
+    /**
+     * @param $name
+     * @return Dimension
+     */
+    public function getDimension($name) {
+
+        return empty($this->dimensions[$name]) ? false : $this->dimensions[$name];
     }
 
     protected function createTable() {
