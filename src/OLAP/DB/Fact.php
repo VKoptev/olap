@@ -86,6 +86,37 @@ class Fact extends Base {
         return empty($this->dimensions[$name]) ? false : $this->dimensions[$name];
     }
 
+    public function setData(array $data) {
+
+        $where  = [];
+        $params = [];
+        $fields = $this->getKeys();
+        foreach ($this->getDimensions() as $dimension) {
+            $key = $dimension->getTableName();
+            if (!isset($fields[$key])) {
+                // skip parents
+                continue;
+            }
+            $value = $dimension->getId($data);
+            $params[":$key"] = $dimension->getId($data);
+            $where[] = "$fields[$key] " . ($value === null ? 'IS NULL' : "= :$key");
+        }
+        $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
+        $setter = $this->sender()->getSetter($data);
+
+        $id = $this->db()->fetchColumn("SELECT id from public.{$this->getTableName()} $where", $params);
+        if (!$id) {
+            $values = ':' . implode(',:', array_keys($fields));
+            $fields = implode(',', array_values($fields));
+            $id = $this->db()->fetchColumn(
+                "INSERT INTO public.{$this->getTableName()} ($fields) VALUES ($values) RETURNING id",
+                $params
+            );
+        }
+        $params = array_merge($params, $setter->getParams(), [':id' => $id]);
+        $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$setter->getQuery()} WHERE id=:id RETURNING id", $params);
+    }
+
     protected function createTable() {
 
         list($fields, $constraints) = $this->getTableDefinition();
@@ -129,32 +160,38 @@ class Fact extends Base {
             'id' => "id serial NOT NULL",
             $this->dataField() => "{$this->dataField()} {$this->getDataType()->getTableName()}",
         ];
-        $key            = [];
         $constraints    = [
             'id' => "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)"
         ];
-        $parents = [];
-        foreach ($this->getDimensions() as $dimension) {
+        $key = $this->getKeys();
+        foreach ($key as $table => $field) {
 
-            $fields[$dimension->getTableName()]       = "{$dimension->getTableName()}_id integer";
-            $key[$dimension->getTableName()]          = "{$dimension->getTableName()}_id";
-            $constraints[$dimension->getTableName()]  = $this->getFK($dimension->getTableName());
-            if ($parent = $dimension->object()->getParent()) {
-                $parents[$parent] = true;
-            }
+            $fields[$table]       = "$field integer";
+            $constraints[$table]  = $this->getFK($table);
         }
-        $fields         = array_diff_key($fields, $parents);
-        $key            = array_diff_key($key, $parents);
-        $constraints    = array_diff_key($constraints, $parents);
 
         if (($parent = $this->object()->getParent()) && ($parent = $this->sender()->getFact($parent))) {
             $fields[$parent->getTableName()] = "{$parent->getTableName()}_id integer";
             $constraints[$parent->getTableName()]  = $this->getFK($parent->getTableName());
         }
 
-        $key = implode(",",   $key);
+        $key = implode(",", $key);
         $constraints['unique'] = "CONSTRAINT {$this->getTableName()}_unique UNIQUE ($key)";
 
         return [$fields, $constraints];
+    }
+
+    private function getKeys() {
+
+        $key     = [];
+        $parents = [];
+        foreach ($this->getDimensions() as $dimension) {
+            $key[$dimension->getTableName()]          = "{$dimension->getTableName()}_id";
+            if ($parent = $dimension->object()->getParent()) {
+                $parents[$parent] = true;
+            }
+        }
+        $key = array_diff_key($key, $parents);
+        return $key;
     }
 }

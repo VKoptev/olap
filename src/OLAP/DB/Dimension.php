@@ -37,6 +37,37 @@ class Dimension extends Base {
         return $this->type;
     }
 
+    public function getId(array $data) {
+
+        $value = $this->object()->mapValue($data);
+        if ($value === null) {
+            $id = $this->db()->fetchColumn("SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} IS NULL");
+        } else {
+            $id = $this->db()->fetchColumn(
+                "SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} = :value",
+                [':value' => $value]
+            );
+        }
+        if (empty($id)) {
+            $values = [$this->sender()->valueField() => ':value'];
+            $params = [':value' => $value];
+
+            if (($parent = $this->object()->getParent()) && ($parent = $this->sender()->getDimension($parent))) {
+                $pid = "{$parent->getTableName()}_id";
+                $values[$pid] = ":$pid";
+                $params[":$pid"] = $parent->getId($data);
+            }
+
+            $fields = implode(',', array_keys($values));
+            $values = implode(',', array_values($values));
+            $id = $this->db()->fetchColumn(
+                "INSERT INTO public.{$this->getTableName()} ($fields) VALUES ($values) RETURNING id",
+                $params
+            );
+        }
+        return $id;
+    }
+
     protected function createTable() {
 
         $this->getType()->checkStructure();

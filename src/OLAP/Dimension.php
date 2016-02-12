@@ -44,16 +44,11 @@ class Dimension extends Model {
     /**
      * Return dimension value
      * @param array $data
-     * @param array $map [dimension_name => data_key]
      * @return mixed
      */
-    public function getData(array $data, array $map = []) {
+    public function mapValue(array $data) {
 
-        $key = $this->name;
-        if (!empty($map[$key])) {
-            $key = $map[$key];
-        }
-        return array_key_exists($key, $data) ? $data[$key] : null;
+        return array_key_exists($this->name, $data) ? $data[$this->name] : null;
     }
 
     protected function makeName($name) {
