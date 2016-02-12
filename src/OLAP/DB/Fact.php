@@ -3,6 +3,7 @@
 namespace OLAP\DB;
 
 use Doctrine\DBAL\Connection;
+use OLAP\Event;
 
 
 /**
@@ -30,6 +31,10 @@ class Fact extends Base {
         $this->dimensions = [];
         foreach ($this->object()->getDimensions() as $dimension) {
             $this->dimensions[$dimension->getName()] = new Dimension($this->db(), $dimension, $this);
+        }
+
+        if ($parent = $this->getParent()) {
+            Event\Ruler::getInstance()->addListener(new Event\Listener(Event\Type::EVENT_SET_DATA, [$this, 'onParentSetData'], $parent->getTableName()));
         }
     }
 
@@ -91,14 +96,10 @@ class Fact extends Base {
         $where  = [];
         $params = [];
         $fields = $this->getKeys();
-        foreach ($this->getDimensions() as $dimension) {
-            $key = $dimension->getTableName();
-            if (!isset($fields[$key])) {
-                // skip parents
-                continue;
-            }
-            $value = $dimension->getId($data);
-            $params[":$key"] = $dimension->getId($data);
+        foreach ($fields as $key => $field) {
+            $dimension = $this->getDimension($key);
+            $value = $dimension ? $dimension->getId($data) : (array_key_exists($key, $data) ? $data[$key] : null);
+            $params[":$key"] = $value;
             $where[] = "$fields[$key] " . ($value === null ? 'IS NULL' : "= :$key");
         }
         $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
@@ -114,7 +115,16 @@ class Fact extends Base {
             );
         }
         $params = array_merge($params, $setter->getParams(), [':id' => $id]);
-        $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$setter->getQuery()} WHERE id=:id RETURNING id", $params);
+        $data[$this->getTableName()] = $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$setter->getQuery()} WHERE id=:id RETURNING id", $params);
+
+        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
+    }
+
+    public function onParentSetData($args) {
+
+        if (!empty($args['data'])) {
+            $this->setData($args['data']);
+        }
     }
 
     protected function createTable() {
@@ -153,6 +163,16 @@ class Fact extends Base {
         }
     }
 
+    /**
+     * @return Fact
+     */
+    private function getParent() {
+        if ($parent = $this->object()->getParent()) {
+            $parent = $this->sender()->getFact($parent);
+        }
+        return $parent ?: null;
+    }
+
     private function getTableDefinition() {
 
 
@@ -170,11 +190,6 @@ class Fact extends Base {
             $constraints[$table]  = $this->getFK($table);
         }
 
-        if (($parent = $this->object()->getParent()) && ($parent = $this->sender()->getFact($parent))) {
-            $fields[$parent->getTableName()] = "{$parent->getTableName()}_id integer";
-            $constraints[$parent->getTableName()]  = $this->getFK($parent->getTableName());
-        }
-
         $key = implode(",", $key);
         $constraints['unique'] = "CONSTRAINT {$this->getTableName()}_unique UNIQUE ($key)";
 
@@ -186,10 +201,14 @@ class Fact extends Base {
         $key     = [];
         $parents = [];
         foreach ($this->getDimensions() as $dimension) {
-            $key[$dimension->getTableName()]          = "{$dimension->getTableName()}_id";
+            $key[$dimension->getTableName()] = "{$dimension->getTableName()}_id";
             if ($parent = $dimension->object()->getParent()) {
                 $parents[$parent] = true;
             }
+        }
+
+        if ($parent = $this->getParent()) {
+            $key[$parent->getTableName()] = "{$parent->getTableName()}_id";
         }
         $key = array_diff_key($key, $parents);
         return $key;

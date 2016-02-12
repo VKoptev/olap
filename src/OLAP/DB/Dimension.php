@@ -52,7 +52,7 @@ class Dimension extends Base {
             $values = [$this->sender()->valueField() => ':value'];
             $params = [':value' => $value];
 
-            if (($parent = $this->object()->getParent()) && ($parent = $this->sender()->getDimension($parent))) {
+            if ($parent = $this->getParent()) {
                 $pid = "{$parent->getTableName()}_id";
                 $values[$pid] = ":$pid";
                 $params[":$pid"] = $parent->getId($data);
@@ -96,5 +96,15 @@ class Dimension extends Base {
         ;
 
         $this->db()->exec($sql);
+    }
+
+    /**
+     * @return Dimension
+     */
+    private function getParent() {
+        if ($parent = $this->object()->getParent()) {
+            $parent = $this->sender()->getDimension($parent);
+        }
+        return $parent ?: null;
     }
 }

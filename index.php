@@ -107,12 +107,12 @@ $cube = new \OLAP\Cube(
                 ],
             ]
         ],
-        'date' => [
-            'name' => 'date',
-            'special' => 'timezone',
-            'parent' => 'hour',
-            'dimension' => 'hour',
-        ],
+//        'date' => [
+//            'name' => 'date',
+//            'special' => 'timezone',
+//            'parent' => 'hour',
+//            'dimension' => 'hour',
+//        ],
         'sub_hour' => [
             'name' => 'sub_hour',
             'parent' => 'hour',
