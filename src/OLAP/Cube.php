@@ -15,10 +15,6 @@ class Cube extends Model {
      */
     private $dataType;
 
-//    private $pusher = ['', []];
-//    private $setter = ['', []];
-//    private $aggregate = ['', []];
-
 
     public function __construct($name, $facts = [], $dataType = [], $options = []) {
 
@@ -90,7 +86,7 @@ class Cube extends Model {
             $fact['name'],
             array_merge(
                 array_diff_key($fact, array_flip(['name', 'special'])),
-                ['cube_name' => $this->name]
+                ['cube_name' => $this->name, 'special' => true]
             )
         );
     }

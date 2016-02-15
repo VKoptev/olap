@@ -101,7 +101,7 @@ class Dimension extends Base {
     /**
      * @return Dimension
      */
-    private function getParent() {
+    protected function getParent() {
         if ($parent = $this->object()->getParent()) {
             $parent = $this->sender()->getDimension($parent);
         }

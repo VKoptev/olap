@@ -3,6 +3,7 @@
 namespace OLAP\SpecialFact;
 
 
+use OLAP\Dimension;
 use OLAP\Fact;
 
 class Timezone extends Fact {
@@ -19,23 +20,36 @@ class Timezone extends Fact {
                 'type' => 'date',
                 'parent' => 'timezone',
                 'denormalized' => true,
-                'index' => 'btree'
+                'index' => 'btree',
+                'format' => 'Y',
+                'db-format' => 'Y-01-01',
             ],
             [
                 'name' => 'month',
                 'type' => 'date',
                 'parent' => 'year',
                 'denormalized' => true,
-                'index' => 'btree'
+                'index' => 'btree',
+                'format' => 'Y-m',
+                'db-format' => 'Y-m-01',
             ],
             [
                 'name' => 'day',
                 'type' => 'date',
                 'parent' => 'month',
                 'denormalized' => true,
-                'index' => 'btree'
+                'index' => 'btree',
+                'format' => 'Y-m-d',
+                'db-format' => 'Y-m-d',
             ],
         ];
         parent::__construct($name, $dimensions, $options);
+    }
+
+    public function getSpecialDimension($name = true) {
+
+        $dimension = $this->getOption('dimension');
+        $dimension = $dimension ? new Dimension($dimension, '', []) : null;
+        return $dimension ? ($name ? $dimension->getName() : $dimension) : false;
     }
 }

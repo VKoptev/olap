@@ -38,7 +38,11 @@ class Cube extends Base {
 
         $this->facts = [];
         foreach ($this->object()->getFacts() as $fact) {
-            $this->facts[$fact->getName()] = new Fact($this->db(), $fact, $this);
+            $class = Fact::class;
+            if ($fact->isSpecial()) {
+                $class = $this->getSpecialFact($fact);
+            }
+            $this->facts[$fact->getName()] = new $class($this->db(), $fact, $this);
         }
         $this->dataType = new Type($this->db(), $this->object()->getDataType());
     }
@@ -126,11 +130,21 @@ class Cube extends Base {
     }
 
     /**
+     * @param string $alias
      * @return UserQuery
      */
-    public function getAggregate() {
+    public function getAggregate($alias = '') {
 
-        return $this->getUserQuery('aggregate', $this->getDataType()->object()->getAggregate());
+        return $this->getUserQuery('aggregate', $this->getDataType()->object()->getAggregate(), ['%ALIAS%' => $alias ? "$alias." : '']);
+    }
+
+    /**
+     * @param string $alias
+     * @return UserQuery
+     */
+    public function getAggregateLinear($alias = '') {
+
+        return $this->getUserQuery('aggregate_linear', $this->getDataType()->object()->getAggregateLinear(), ['%ALIAS%' => $alias ? "$alias." : '']);
     }
 
     /**
@@ -147,7 +161,8 @@ class Cube extends Base {
             if (preg_match_all('/%([^%]+?)%/i', $str, $matches) && !empty($matches[1])) {
                 foreach ($matches[1] as $match) {
                     if ($match === 'DATA_FIELD') {
-                        $str = str_replace("%$match%", $this->dataField(), $str);
+                        $data['%ALIAS%'] = empty($data['%ALIAS%']) ? '' : $data['%ALIAS%'];
+                        $str = str_replace("%$match%", $data['%ALIAS%'] . $this->dataField(), $str);
                     } elseif ($match === 'DATA_TYPE') {
                         $str = str_replace("%$match%", $this->getDataType()->object()->getName(), $str);
                     } elseif (array_key_exists($match, $data)) {
@@ -160,5 +175,17 @@ class Cube extends Base {
             $this->userQueries[$query] = new UserQuery($str, $params);
         }
         return $this->userQueries[$query];
+    }
+
+    protected function getSpecialFact($fact) {
+
+        $class = get_class($fact);
+        $n = strpos($class, 'SpecialFact\\');
+        if ($n === false) {
+            $class = Fact::class;
+        } else {
+            $class = __NAMESPACE__ . '\\' . substr($class, $n);
+        }
+        return $class;
     }
 }

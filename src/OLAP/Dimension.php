@@ -11,7 +11,7 @@ class Dimension extends Model {
      */
     private $type;
 
-    public function __construct($name, $type, $options) {
+    public function __construct($name, $type, $options = []) {
 
         $this->name = $name;
         $this->type = $type instanceof Type ? $type : new Type($type);

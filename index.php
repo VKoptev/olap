@@ -19,6 +19,8 @@ spl_autoload_register(function($className) {
 class EchoSQLLogger implements \Doctrine\DBAL\Logging\SQLLogger
 {
     private $time = 0;
+    private $counter = 0;
+    private $summaryTime = 0;
     /**
      * {@inheritdoc}
      */
@@ -31,9 +33,9 @@ class EchoSQLLogger implements \Doctrine\DBAL\Logging\SQLLogger
             var_dump($params);
         }
 
-        if ($types) {
-            var_dump($types);
-        }
+//        if ($types) {
+//            var_dump($types);
+//        }
     }
 
     /**
@@ -42,7 +44,15 @@ class EchoSQLLogger implements \Doctrine\DBAL\Logging\SQLLogger
     public function stopQuery()
     {
 
-        echo "<pre>Time execution: " . (microtime(true) - $this->time) . "</pre>" . PHP_EOL;
+        $diff = microtime(true) - $this->time;
+        $this->counter++;
+        $this->summaryTime += $diff;
+        echo "<pre>Time execution: $diff</pre>" . PHP_EOL;
+    }
+
+    public function getSummary() {
+
+        echo "<pre>Queries: {$this->counter}\nTime execution: {$this->summaryTime}</pre>" . PHP_EOL;
     }
 }
 $db = \Doctrine\DBAL\DriverManager::getConnection([
@@ -53,7 +63,8 @@ $db = \Doctrine\DBAL\DriverManager::getConnection([
     'password' => 'user',
     'driver' => 'pdo_pgsql'
 ]);
-if (0) $db->getConfiguration()->setSQLLogger(new EchoSQLLogger());
+$logger = new EchoSQLLogger();
+if (1) $db->getConfiguration()->setSQLLogger($logger);
 $cube = new \OLAP\Cube(
     'tracks',
     [ // facts
@@ -107,12 +118,12 @@ $cube = new \OLAP\Cube(
                 ],
             ]
         ],
-//        'date' => [
-//            'name' => 'date',
-//            'special' => 'timezone',
-//            'parent' => 'hour',
-//            'dimension' => 'hour',
-//        ],
+        'date' => [
+            'name' => 'date',
+            'special' => 'timezone',
+            'parent' => 'hour',
+            'dimension' => 'hour',
+        ],
         'sub_hour' => [
             'name' => 'sub_hour',
             'parent' => 'hour',
@@ -144,6 +155,7 @@ $cube = new \OLAP\Cube(
         'name' => 'info',
         'create' => 'CREATE TYPE info AS("raw" integer,uniq integer)',
         'aggregate' => 'Row(SUM((%DATA_FIELD%).raw), SUM((%DATA_FIELD%).uniq))::%DATA_TYPE%',
+        'aggregate_linear' => 'SUM((%DATA_FIELD%).raw) as raw, SUM((%DATA_FIELD%).uniq) as uniq',
         'set_data' => '%DATA_FIELD%.raw = %raw%, %DATA_FIELD%.uniq = %uniq%',
         'push_data' => <<<SQL
 %DATA_FIELD%.raw = COALESCE((%DATA_FIELD%).raw, 0) + %raw%,
@@ -224,3 +236,5 @@ for ($i = -300; $i < 0; $i++){
         }
     }
 }
+
+$logger->getSummary();

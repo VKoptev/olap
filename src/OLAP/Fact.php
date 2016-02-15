@@ -68,6 +68,11 @@ class Fact extends Model {
         return $parent ? $this->makeName($parent) : null;
     }
 
+    public function isSpecial() {
+
+        return $this->getOption('special', false);
+    }
+
     protected function makeName($name) {
 
         return self::PREFIX . $this->getOption('cube_name', 'cube') . '_' . $name;

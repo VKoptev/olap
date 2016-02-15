@@ -20,4 +20,9 @@ class DataType extends Type {
         return $this->getOption('aggregate');
     }
 
+    public function getAggregateLinear() {
+
+        return $this->getOption('aggregate_linear');
+    }
+
 }

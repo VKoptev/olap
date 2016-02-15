@@ -30,7 +30,8 @@ class Fact extends Base {
 
         $this->dimensions = [];
         foreach ($this->object()->getDimensions() as $dimension) {
-            $this->dimensions[$dimension->getName()] = new Dimension($this->db(), $dimension, $this);
+            $class = $this->dimensionClass();
+            $this->dimensions[$dimension->getName()] = new $class($this->db(), $dimension, $this);
         }
 
         if ($parent = $this->getParent()) {
@@ -99,25 +100,13 @@ class Fact extends Base {
         foreach ($fields as $key => $field) {
             $dimension = $this->getDimension($key);
             $value = $dimension ? $dimension->getId($data) : (array_key_exists($key, $data) ? $data[$key] : null);
+            $data[$key] = $value;
             $params[":$key"] = $value;
             $where[] = "$fields[$key] " . ($value === null ? 'IS NULL' : "= :$key");
         }
         $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
-        $setter = $this->sender()->getSetter($data);
 
-        $id = $this->db()->fetchColumn("SELECT id from public.{$this->getTableName()} $where", $params);
-        if (!$id) {
-            $values = ':' . implode(',:', array_keys($fields));
-            $fields = implode(',', array_values($fields));
-            $id = $this->db()->fetchColumn(
-                "INSERT INTO public.{$this->getTableName()} ($fields) VALUES ($values) RETURNING id",
-                $params
-            );
-        }
-        $params = array_merge($params, $setter->getParams(), [':id' => $id]);
-        $data[$this->getTableName()] = $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$setter->getQuery()} WHERE id=:id RETURNING id", $params);
-
-        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
+        $this->updateData($this->sender()->getSetter($data), $fields, $where, $params, $data);
     }
 
     public function onParentSetData($args) {
@@ -135,6 +124,17 @@ class Fact extends Base {
         $constraints    = implode(",", $constraints);
 
         $this->db()->exec("CREATE TABLE public.{$this->getTableName()} ($fields, $constraints) WITH(OIDS=FALSE);");
+    }
+
+    protected function dimensionClass() {
+
+        return Dimension::class;
+    }
+
+    protected function addFactId() {
+
+        // virtual
+        return true;
     }
 
     protected function checkTable() {
@@ -166,14 +166,14 @@ class Fact extends Base {
     /**
      * @return Fact
      */
-    private function getParent() {
+    protected function getParent() {
         if ($parent = $this->object()->getParent()) {
             $parent = $this->sender()->getFact($parent);
         }
         return $parent ?: null;
     }
 
-    private function getTableDefinition() {
+    protected function getTableDefinition() {
 
 
         $fields         = [
@@ -196,7 +196,7 @@ class Fact extends Base {
         return [$fields, $constraints];
     }
 
-    private function getKeys() {
+    protected function getKeys() {
 
         $key     = [];
         $parents = [];
@@ -207,10 +207,33 @@ class Fact extends Base {
             }
         }
 
-        if ($parent = $this->getParent()) {
+        if ($this->addFactId() && $parent = $this->getParent()) {
             $key[$parent->getTableName()] = "{$parent->getTableName()}_id";
         }
         $key = array_diff_key($key, $parents);
         return $key;
+    }
+
+    protected function updateData(UserQuery $query, $fields, $where, $params, $data) {
+
+        $values = ':' . implode(',:', array_keys($fields));
+        $fields = implode(',', array_values($fields));
+        $params = array_merge($params, $query->getParams());
+        $sql = <<<SQL
+WITH upsert as (
+  UPDATE public.{$this->getTableName()} SET {$query->getQuery()} $where RETURNING id
+),
+inserted as (
+  INSERT INTO public.{$this->getTableName()} ($fields) SELECT $values WHERE NOT EXISTS(SELECT * FROM upsert)  RETURNING id
+), insert_update as (
+  UPDATE public.{$this->getTableName()} SET {$query->getQuery()} WHERE id = (SELECT id FROM inserted) RETURNING id
+)
+SELECT * FROM upsert
+UNION
+SELECT * FROM inserted
+SQL;
+        $data[$this->getTableName()] = $this->db()->fetchColumn($sql, $params);
+
+        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
     }
 }
