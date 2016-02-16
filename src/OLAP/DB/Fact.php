@@ -37,6 +37,7 @@ class Fact extends Base {
 
         if ($parent = $this->getParent()) {
             Event\Ruler::getInstance()->addListener(new Event\Listener(Event\Type::EVENT_SET_DATA, [$this, 'onParentSetData'], $parent->getTableName()));
+            Event\Ruler::getInstance()->addListener(new Event\Listener(Event\Type::EVENT_TRUNCATE_FACT, [$this, 'onTruncate'], $parent->getTableName()));
         }
     }
 
@@ -68,12 +69,23 @@ class Fact extends Base {
         parent::checkStructure();
     }
 
+    public function onTruncate($args) {
+
+        $this->truncate();
+    }
+
+    public function truncate() {
+
+        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_TRUNCATE_FACT, $this->getTableName());
+        $this->db()->exec("TRUNCATE {$this->getTableName()} CASCADE");
+    }
+
     /**
      * @return string
      */
     public function dataField() {
 
-        return 'data';
+        return $this->sender()->dataField();
     }
 
     /**
@@ -81,7 +93,7 @@ class Fact extends Base {
      */
     public function valueField() {
 
-        return 'value';
+        return $this->sender()->valueField();
     }
 
     /**
@@ -107,7 +119,7 @@ class Fact extends Base {
         }
         $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
 
-        $this->updateData($this->sender()->getSetter($data), $fields, $where, $params, $data);
+        $this->updateData($this->sender()->getPusher($data), $fields, $where, $params, $data);
     }
 
     public function onParentSetData($args) {

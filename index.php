@@ -26,18 +26,37 @@ $db = \Doctrine\DBAL\DriverManager::getConnection([
 ]);
 $logger = new \Test\EchoSQLLogger();
 if (1) $db->getConfiguration()->setSQLLogger($logger);
-$cube = \Test\Cube::get();
 
+$cube = \Test\Cube::get();
 $server = new OLAP\Server($db, $cube);
+
+
+$mongo = new \MongoClient();
+
+\JobQueue\Options::getInstance()->setOptions([
+    'mongo' => $mongo->selectDB('olap_queue'),
+    'worker_cmd' => "php " . __FILE__ . " worker",
+    'worker_max_count' => 30,
+    'job_types' => [
+        \Test\JobBuilder::TYPE => \OLAP\Queue\Job::class
+    ],
+    'log' => function($msg) {
+        $date = date('Y-m-d H:i:s');
+        file_put_contents('/tmp/job.log', "[$date]: $msg\n", FILE_APPEND);
+    },
+    'olapServer' => $server
+]);
 
 if (!empty($argv[1])) {
     switch($argv[1]) {
-        case 'set-data':
-            \Test\Server::testCheckStructure($server);
-            \Test\Server::testSetData($server);
+        case 'worker':
+            (new \JobQueue\Worker($argv[2]))->run();
             break;
-        case 'test-multi-threading':
-            \Test\Server::testMultiThreadAggregation($server, "php " . __FILE__ . " test-multi-threading %thread%", empty($argv[2]) ? null : $argv[2]);
+        case 'dispatcher':
+            (new \JobQueue\Dispatcher())->run();
+            break;
+        case 'set-data':
+            \Test\Server::fillData($server);
             break;
     }
 }

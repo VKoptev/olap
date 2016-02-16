@@ -84,6 +84,17 @@ class Cube extends Base {
         }
     }
 
+    public function truncate() {
+
+        foreach ($this->getFacts() as $fact) {
+            if ($fact->object()->getParent()) {
+                // will updated by events
+                continue;
+            }
+            $fact->truncate();
+        }
+    }
+
     /**
      * @return string
      */
@@ -109,15 +120,6 @@ class Cube extends Base {
             }
             $fact->setData($data);
         }
-    }
-
-    /**
-     * @param array $data
-     * @return UserQuery
-     */
-    public function getSetter(array $data) {
-
-        return $this->getUserQuery('setter', $this->getDataType()->object()->getSetData(), $data);
     }
 
     /**

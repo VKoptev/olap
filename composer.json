@@ -9,7 +9,8 @@
   },
   "require": {
     "php": ">=5.5.0",
-    "doctrine/dbal": "2.3.5"
+    "doctrine/dbal": "2.3.5",
+    "vkoptev/job_queue": "dev-master"
   },
   "repositories": [
     {

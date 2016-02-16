@@ -37,4 +37,10 @@ class Server {
 
         $this->cube->setData($data);
     }
+
+    public function truncate() {
+
+        $this->checkStructure();
+        $this->cube->truncate();
+    }
 }
