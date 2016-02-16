@@ -51,9 +51,26 @@ class Timezone extends Fact {
 
         $currentTZ = date_default_timezone_get();
         date_default_timezone_set("UTC");
+
+        $params = [];
+        $where = [];
+        if (!empty($args['date']['from'])) {
+            $where[] = "{$this->valueField()} >= :from";
+            $params[':from'] = date('Y-m-d H:i:s', strtotime($args['date']['from']));
+        }
+        if (!empty($args['date']['to'])) {
+            $where[] = "{$this->valueField()} <= :to";
+            $params[':to'] = date('Y-m-d H:i:s', strtotime($args['date']['to']));
+        }
+
+        $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
+
         
         $special = $this->getSpecialDimension();
-        $range = $this->db()->fetchAssoc("SELECT MIN({$this->valueField()}) as min, MAX({$this->valueField()}) as max FROM {$special->getTableName()}");
+        $range = $this->db()->fetchAssoc("SELECT MIN({$this->valueField()}) as min, MAX({$this->valueField()}) as max FROM {$special->getTableName()} $where", $params);
+        if (!$range['min']) {
+            return;
+        }
 
         $allFields = $this->getKeys();
         $fields = array_diff($allFields, $this->getParent()->getKeys());
@@ -94,13 +111,13 @@ class Timezone extends Fact {
                     }
                 }
                 $doc[$dimension->getTableName()] = $value["{$dimension->getTableName()}_id"];
-                $this->setData($doc);
+                $this->pushData($doc);
             }
         }
         date_default_timezone_set($currentTZ);
     }
 
-    public function setData(array $data) {
+    public function pushData(array $data) {
 
         $where  = [];
         $params = [];
@@ -111,7 +128,7 @@ class Timezone extends Fact {
         }
         $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
 
-        $this->updateData($this->sender()->getSetter($data), $fields, $where, $params, $data);
+        $this->updateData($this->sender()->getPusher($data), $fields, $where, $params, $data);
     }
 
     protected function dimensionClass() {

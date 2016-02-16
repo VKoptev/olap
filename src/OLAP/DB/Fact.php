@@ -3,6 +3,7 @@
 namespace OLAP\DB;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DBALException;
 use OLAP\Event;
 
 
@@ -219,7 +220,12 @@ class Fact extends Base {
         $values = ':' . implode(',:', array_keys($fields));
         $fields = implode(',', array_values($fields));
         $params = array_merge($params, $query->getParams());
-        $this->db()->fetchColumn("INSERT INTO public.{$this->getTableName()} ($fields) SELECT $values WHERE NOT EXISTS(SELECT 1 FROM public.{$this->getTableName()} $where)", $params);
+        try {
+            $this->db()->fetchColumn("INSERT INTO public.{$this->getTableName()} ($fields) SELECT $values WHERE NOT EXISTS(SELECT 1 FROM public.{$this->getTableName()} $where)",
+                $params);
+        } catch (DBALException $e) {
+            // ignore it - update in any case
+        }
         $data[$this->getTableName()] = $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$query->getQuery()} $where RETURNING id", $params);
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);

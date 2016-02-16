@@ -35,10 +35,6 @@ class Server {
 
     public function setData(array $data) {
 
-        $this->db->beginTransaction();
-
         $this->cube->setData($data);
-
-        $this->db->commit();
     }
 }
