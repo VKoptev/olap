@@ -3,9 +3,11 @@
 namespace OLAP\DB\SpecialFact;
 
 
+use Doctrine\DBAL\Connection;
+use OLAP\DB\Cube;
+use OLAP\Event;
 use OLAP\DB\Fact;
 use OLAP\DB\SpecialFact\Timezone\Dimension;
-use OLAP\DB\UserQuery;
 
 /**
  * Class Timezone
@@ -15,6 +17,13 @@ use OLAP\DB\UserQuery;
 class Timezone extends Fact {
 
     private $aggregatedData = [];
+
+    public function __construct(Connection $db, \OLAP\SpecialFact\Timezone $object, Cube $sender = null) {
+
+        parent::__construct($db, $object, $sender);
+
+        Event\Ruler::getInstance()->addListener(new Event\Listener(Event\Type::EVENT_SET_ALL_DATA, [$this, 'onSetAllData']));
+    }
 
     /**
      * @param $name
@@ -33,40 +42,76 @@ class Timezone extends Fact {
         return $this->getDimension($this->object()->getSpecialDimension());
     }
 
+    public function onParentSetData($args) {
+
+        // don't set data
+    }
+
+    public function onSetAllData($args) {
+
+        $currentTZ = date_default_timezone_get();
+        date_default_timezone_set("UTC");
+        
+        $special = $this->getSpecialDimension();
+        $range = $this->db()->fetchAssoc("SELECT MIN({$this->valueField()}) as min, MAX({$this->valueField()}) as max FROM {$special->getTableName()}");
+
+        $allFields = $this->getKeys();
+        $fields = array_diff($allFields, $this->getParent()->getKeys());
+        $keys = array_intersect($allFields, $this->getParent()->getKeys());
+        list($field,) = each($fields);
+        $dimension = $this->getDimension($field);
+        $list = $dimension->getInfoByRange($range['min'], $range['max']);
+
+        $interval = $dimension->object()->getOption('minimal-offset', '+1day');
+        $group = implode(',', array_values($keys));
+        $aggregator = $this->sender()->getAggregateLinear($this->getParent()->getTableName());
+        $params = $aggregator->getParams();
+        $cache = [];
+        foreach ($list as $value) {
+            $timezone = $value['timezone'];
+            $date = new \DateTime($value['value'], $timezone);
+            $date->setTimezone(new \DateTimeZone('UTC'));
+
+            $range = [$date->format('Y-m-d H:i:s'), $date->modify($interval)->format('Y-m-d H:i:s')];
+            $cacheKey = md5(json_encode($range));
+            if (!isset($cache[$cacheKey])) {
+                $params[":{$special->getTableName()}_start"] = $range[0];
+                $params[":{$special->getTableName()}_end"] = $range[1];
+
+                $sql = "SELECT $group,{$aggregator->getQuery()} FROM {$this->getParent()->getTableName()} " .
+                    "INNER JOIN {$special->getTableName()} ON {$special->getTableName()}.id={$this->getParent()->getTableName()}.{$special->getTableName()}_id " .
+                    "WHERE {$special->getTableName()}.{$this->valueField()} >= :{$special->getTableName()}_start AND {$special->getTableName()}.{$this->valueField()} < :{$special->getTableName()}_end " .
+                    "GROUP BY $group";
+                $cache[$cacheKey] = $this->db()->fetchAll($sql, $params);
+            }
+            $data = $cache[$cacheKey];
+            foreach ($data as $doc) {
+                foreach ($doc as $key => $val) {
+                    if (substr($key, -3) === '_id') {
+                        unset($doc[$key]);
+                        $key = substr($key, 0, -3);
+                        $doc[$key] = $val;
+                    }
+                }
+                $doc[$dimension->getTableName()] = $value["{$dimension->getTableName()}_id"];
+                $this->setData($doc);
+            }
+        }
+        date_default_timezone_set($currentTZ);
+    }
+
     public function setData(array $data) {
 
         $where  = [];
         $params = [];
         $fields = $this->getKeys();
-        foreach ($this->getParent()->getKeys() as $key => $field) {
-            if (isset($fields[$key])) {
-                $params[":$key"] = $data[$key];
-                $where[] = "$fields[$key] " . ($data[$key] === null ? 'IS NULL' : "= :$key");
-            }
-        }
-        $parentWhere = $where;
-        $parentParams = $params;
-        $values = [];
-        $param = null;
         foreach ($fields as $key => $field) {
-            if (!isset($params[":$key"]) && ($dimension = $this->getDimension($key))) {
-                $values = $dimension->getIds($data);
-                $param = $key;
-                $params[":$key"] = null;
-                $where[] = "$fields[$key] = :$key";
-                break;
-            }
+            $params[":$key"] = $data[$key];
+            $where[] = "$field " . ($data[$key] === null ? 'IS NULL' : "= :$key");
         }
         $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
 
-        $this->aggregatedData = [];
-        foreach ($values as $value) {
-            $params[":$param"] = $value["{$param}_id"];
-
-            $setter = $this->sender()->getSetter($this->getAggregatedData($value, $parentWhere, $parentParams));
-
-            $this->updateData($setter, $fields, $where, $params, $data);
-        }
+        $this->updateData($this->sender()->getSetter($data), $fields, $where, $params, $data);
     }
 
     protected function dimensionClass() {
@@ -88,32 +133,5 @@ class Timezone extends Fact {
             $keys = array_merge($keys, $parentKeys);
         }
         return $keys;
-    }
-
-    protected function getAggregatedData($value, $parentWhere, $parentParams) {
-
-        $timezone = new \DateTimeZone($value['timezone']);
-        $offset = $timezone->getOffset(new \DateTime());
-        $key = "{$value['value']} $offset";
-        if (!isset($this->aggregatedData[$key])) {
-            $date = new \DateTime($value['value'], $timezone);
-            $date->setTimezone(new \DateTimeZone('UTC'));
-
-            $special = $this->getSpecialDimension(false);
-            $parentWhere[] = "{$special->getTableName()}.{$this->valueField()} >= :{$special->getTableName()}_start";
-            $parentWhere[] = "{$special->getTableName()}.{$this->valueField()} < :{$special->getTableName()}_end";
-            $parentParams[":{$special->getTableName()}_start"] = $date->format('Y-m-d H:i:s');
-            $parentParams[":{$special->getTableName()}_end"] = $date->modify("+1day")->format('Y-m-d H:i:s');
-
-            $where = $parentWhere ? 'WHERE (' . implode(') AND (', $parentWhere) . ')' : '';
-
-            $aggregator = $this->sender()->getAggregateLinear($this->getParent()->getTableName());
-            $sql = "SELECT {$aggregator->getQuery()} FROM {$this->getParent()->getTableName()} " .
-                   "INNER JOIN {$special->getTableName()} ON {$special->getTableName()}.id = {$this->getParent()->getTableName()}.{$special->getTableName()}_id " .
-                   "$where"
-            ;
-            $this->aggregatedData[$key] = $this->db()->fetchAssoc($sql, array_merge($parentParams, $aggregator->getParams()));
-        }
-        return $this->aggregatedData[$key];
     }
 }

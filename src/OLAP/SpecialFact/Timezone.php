@@ -13,7 +13,7 @@ class Timezone extends Fact {
         $dimensions = [
             [
                 'name' => 'timezone',
-                'type' => 'character varying(100)'
+                'type' => 'integer'
             ],
             [
                 'name' => 'year',

@@ -22,9 +22,9 @@ class Fact extends Base {
     /**
      * @param Connection $db
      * @param \OLAP\Fact $object
-     * @param Base $sender
+     * @param Cube $sender
      */
-    public function __construct(Connection $db, \OLAP\Fact $object, Base $sender = null) {
+    public function __construct(Connection $db, \OLAP\Fact $object, Cube $sender = null) {
 
         parent::__construct($db, $object, $sender);
 
@@ -219,20 +219,8 @@ class Fact extends Base {
         $values = ':' . implode(',:', array_keys($fields));
         $fields = implode(',', array_values($fields));
         $params = array_merge($params, $query->getParams());
-        $sql = <<<SQL
-WITH upsert as (
-  UPDATE public.{$this->getTableName()} SET {$query->getQuery()} $where RETURNING id
-),
-inserted as (
-  INSERT INTO public.{$this->getTableName()} ($fields) SELECT $values WHERE NOT EXISTS(SELECT * FROM upsert)  RETURNING id
-), insert_update as (
-  UPDATE public.{$this->getTableName()} SET {$query->getQuery()} WHERE id = (SELECT id FROM inserted) RETURNING id
-)
-SELECT * FROM upsert
-UNION
-SELECT * FROM inserted
-SQL;
-        $data[$this->getTableName()] = $this->db()->fetchColumn($sql, $params);
+        $this->db()->fetchColumn("INSERT INTO public.{$this->getTableName()} ($fields) SELECT $values WHERE NOT EXISTS(SELECT 1 FROM public.{$this->getTableName()} $where)", $params);
+        $data[$this->getTableName()] = $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$query->getQuery()} $where RETURNING id", $params);
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
     }

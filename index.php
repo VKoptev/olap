@@ -27,11 +27,11 @@ class EchoSQLLogger implements \Doctrine\DBAL\Logging\SQLLogger
     public function startQuery($sql, array $params = null, array $types = null)
     {
         $this->time = microtime(true);
-        echo "<pre>$sql</pre>" . PHP_EOL;
+//        echo "<pre>$sql</pre>" . PHP_EOL;
 
-        if ($params) {
-            var_dump($params);
-        }
+//        if ($params) {
+//            var_dump($params);
+//        }
 
 //        if ($types) {
 //            var_dump($types);
@@ -47,7 +47,7 @@ class EchoSQLLogger implements \Doctrine\DBAL\Logging\SQLLogger
         $diff = microtime(true) - $this->time;
         $this->counter++;
         $this->summaryTime += $diff;
-        echo "<pre>Time execution: $diff</pre>" . PHP_EOL;
+//        echo "<pre>Time execution: $diff</pre>" . PHP_EOL;
     }
 
     public function getSummary() {
@@ -164,6 +164,8 @@ SQL
 
     ]);
 
+
+
 $server = new OLAP\Server($db, $cube);
 $server->checkStructure();
 
@@ -214,12 +216,10 @@ $pipeline = [
         'sub5' => '$_id.sub5',
     ]]
 ];
-for ($i = -300; $i < 0; $i++){
+for ($i = -300; $i < -290; $i++){
     $start  = strtotime(date('Y-m-d 00:00:00', strtotime($i . 'days')));
     $end    = strtotime(date('Y-m-d 00:00:00', strtotime(($i + 1) . 'days')));
-    if (abs($i) % 5 === 0) {
-        echo date('Y-m-d', $start) . "...\n";
-    }
+    echo date('Y-m-d', $start) . "...\n";
     $pipeline[0]['$match'] = [
         'createdAt' => ['$gte' => new MongoDate($start), '$lt' => new MongoDate($end)]
     ];
@@ -232,9 +232,11 @@ for ($i = -300; $i < 0; $i++){
                 $value = $value instanceof MongoId ? (string) $value : $value;
             }
             $server->setData($doc);
-            break 2;
+//            break 2;
         }
     }
 }
+
+OLAP\Event\Ruler::getInstance()->trigger(OLAP\Event\Type::EVENT_SET_ALL_DATA);
 
 $logger->getSummary();
