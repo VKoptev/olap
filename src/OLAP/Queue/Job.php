@@ -4,18 +4,22 @@ namespace OLAP\Queue;
 
 
 use JobQueue\JobBase;
-use JobQueue\Options;
 use OLAP\Server;
 
-class Job extends JobBase {
+abstract class Job extends JobBase {
 
     protected function execute() {
 
-        $server = Options::getInstance()->get('olapServer');
+        $server = $this->getServer();
 
         if ($server instanceof Server && !empty($this->data['data'])) {
             $server->setData($this->data['data']);
         }
         $this->finishJob();
     }
+
+    /**
+     * @return Server
+     */
+    abstract protected function getServer();
 }
