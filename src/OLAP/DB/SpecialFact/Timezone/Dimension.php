@@ -4,6 +4,7 @@ namespace OLAP\DB\SpecialFact\Timezone;
 
 use Doctrine\DBAL\Connection;
 use OLAP\DB\SpecialFact\Timezone;
+use OLAP\Exception;
 
 /**
  * Class Dimension
@@ -17,6 +18,10 @@ class Dimension extends \OLAP\DB\Dimension {
      * @var array
      */
     static private $timezones = [];
+    /**
+     * @var array
+     */
+    static private $nativeTZ = [];
 
     /**
      * @var string
@@ -29,6 +34,18 @@ class Dimension extends \OLAP\DB\Dimension {
         $this->format = $this->object()->getOption('db-format', 'Y-m-d');
     }
 
+    public function truncate() {
+
+        parent::truncate();
+        if (!$this->getParent()) {
+            // add timezones
+            $params = array_keys($this->nativeTZList());
+            $sql = "INSERT INTO {$this->getTableName()} ({$this->sender()->valueField()}) VALUES("
+                 . implode('),(', array_fill(0, count($params), '?')) . ")";
+            $this->db()->fetchAll($sql, $params);
+        }
+    }
+
     public function getIds(array $data) {
 
         $special = $this->sender()->getSpecialDimension()->object();
@@ -38,11 +55,12 @@ class Dimension extends \OLAP\DB\Dimension {
         $dateTime = new \DateTime();
         $dateTime->setTimestamp($value);
         foreach ($this->getTimezones() as $tz) {
-            $dateTime->setTimezone(new \DateTimeZone($tz));
+            $tz = $this->getTimezoneByOffset($tz);
+            $dateTime->setTimezone($tz);
             $values[$dateTime->format($this->format)] = true;
         }
 
-        return $this->getInfoByIds($this->getIdsByValues(array_keys($values)));
+        return $this->getInfo(array_keys($values));
     }
 
     public function getInfoByRange($min, $max) {
@@ -54,7 +72,7 @@ class Dimension extends \OLAP\DB\Dimension {
         for ($i = $start; $i->getTimestamp() <= $end->getTimestamp(); $i->modify($this->object()->getOption('minimal-offset', '+1day'))) {
             $values[] = $i->format($this->format);
         }
-        return $this->getInfoByIds($this->getIdsByValues($values));
+        return $this->getInfo($values);
     }
 
     protected function getTimezones() {
@@ -67,13 +85,7 @@ class Dimension extends \OLAP\DB\Dimension {
             }
             $list = $this->db()->fetchAll("SELECT * FROM {$dimension->getTableName()}");
             if (empty($list)) {
-                $params = [];
-                foreach (timezone_identifiers_list() as $zone) {
-                    $key = floor((new \DateTimeZone($zone))->getOffset(new \DateTime()) / 3600) * 3600;
-                    $params[$key] = true;
-                }
-                $sql = "INSERT INTO {$dimension->getTableName()} ({$this->sender()->valueField()}) VALUES(" . implode('),(', array_fill(0, count($params), '?')) . ") RETURNING *";
-                $list = $this->db()->fetchAll($sql, array_keys($params));
+                throw new Exception('Truncate automatic!');
             }
             self::$timezones = [];
             foreach ($list as $row) {
@@ -84,54 +96,25 @@ class Dimension extends \OLAP\DB\Dimension {
         return self::$timezones;
     }
 
-    protected function getIdsByValues($values) {
+    /**
+     * @return array
+     */
+    protected function nativeTZList() {
 
-        $filter = [];
-        foreach ($values as $value) {
-            $date = new \DateTime($value);
-            $filter[$date->format($this->format)] = true;
-        }
-        $result = [];
-        foreach ($filter as $value => $f) {
-            $value = (new \DateTime($value))->format($this->format);
-
-            $sql = "SELECT id FROM {$this->getTableName()} WHERE {$this->sender()->valueField()} = :value";
-            $list = $this->db()->fetchAll($sql, [':value' => $value]);
-            if (empty($list)) {
-                $parent = $this->getParent();
-                $insert = [];
-                $params = [];
-                $i = 0;
-                if ($parent->getParent()) { // not year
-                    foreach ($parent->getIdsByValues([$value]) as $id) {
-                        $insert[] = "(:value_$i, :{$parent->getTableName()}_$i)";
-                        $params[":value_$i"] = $value;
-                        $params[":{$parent->getTableName()}_$i"] = $id;
-                        ++$i;
-                    }
-                } else {
-                    foreach ($this->getTimezones() as $id => $tz) {
-                        $insert[] = "(:value_$i, :{$parent->getTableName()}_$i)";
-                        $params[":value_$i"] = $value;
-                        $params[":{$parent->getTableName()}_$i"] = $id;
-                        ++$i;
-                    }
-                }
-                $list = $this->db()->fetchAll(
-                    "INSERT INTO {$this->getTableName()} ({$this->sender()->valueField()}, {$parent->getTableName()}_id) VALUES" . implode(',',
-                        $insert) . ' RETURNING id',
-                    $params
-                );
+        if (empty(self::$nativeTZ)) {
+            self::$nativeTZ = [];
+            foreach (timezone_identifiers_list() as $zone) {
+                $zone = new \DateTimeZone($zone);
+                $key = floor($zone->getOffset(new \DateTime()) / 3600) * 3600;
+                self::$nativeTZ[$key] = $zone;
             }
-            $list = array_map(function ($e) {
-                return $e['id'];
-            }, $list);
-            $result = array_unique(array_merge($result, $list));
         }
-        return $result;
+        return self::$nativeTZ;
     }
 
-    protected function getInfoByIds($ids) {
+    protected function getInfo($values) {
+
+        $ids = $this->getIdsByValues($values);
 
         $select = ["{$this->getTableName()}.id as {$this->getTableName()}_id", "{$this->getTableName()}.{$this->sender()->valueField()} as {$this->sender()->valueField()}"];
         $join = [];
@@ -154,11 +137,60 @@ class Dimension extends \OLAP\DB\Dimension {
         return $result;
     }
 
+    protected function getIdsByValues($values, $returnValues = false) {
+
+        $filter = [];
+        foreach ($values as $value) {
+            $date = new \DateTime($value);
+            $filter[$date->format($this->format)] = true;
+        }
+        $filter = array_keys($filter);
+        if (empty($filter)) {
+            return [];
+        }
+
+        $parentIds = [];
+        if ($this->getParent()->getParent()) {
+            $parentIds = $this->getParent()->getIdsByValues($filter, true);
+        } else {
+            $parentIds = array_keys($this->getTimezones());
+        }
+        $values = [];
+        $where  = [];
+        $i = 0;
+        $year = !$this->getParent()->getParent();
+        foreach ($filter as $value) {
+            $valueInParent = (new \DateTime($value))->format($this->getParent()->format);
+            foreach ($parentIds as $id => $pvalue) {
+                // no params because type cast
+                if ($year) {
+                    $id = $pvalue;
+                }
+                if ($year || $valueInParent === $pvalue) {
+                    $values[] = "('$value'::date, $id)";
+                    $where[$value] = "'$value'::date";
+                    ++$i;
+                }
+            }
+        }
+
+        $where = implode(',', $where);
+        $fields = "{$this->sender()->valueField()}, {$this->getParent()->getTableName()}_id";
+        $sql = "WITH new_data as (INSERT INTO public.{$this->getTableName()} ($fields) VALUES " . implode(',', $values) .
+               " ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING RETURNING id, {$this->sender()->valueField()}) " .
+               "SELECT id, {$this->sender()->valueField()} as value FROM new_data " .
+               "UNION SELECT id, {$this->sender()->valueField()} as value FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} IN ($where)"
+        ;
+
+        $result = [];
+        foreach ($this->db()->fetchAll($sql) as $row) {
+            $result[$row['id']] = $row['value'];
+        }
+        return $returnValues ? $result : array_keys($result);
+    }
+
     private function getTimezoneByOffset($offset) {
 
-        $sign = $offset < 0 ? '-' : '+';
-        $hour = str_pad(floor(abs($offset) / 3600), 2, '0', STR_PAD_LEFT);
-        $min  = str_pad(abs($offset) % 3600, 2, '0', STR_PAD_LEFT);
-        return \DateTime::createFromFormat('O', "$sign$hour:$min")->getTimezone();
+        return $this->nativeTZList()[$offset];
     }
 }

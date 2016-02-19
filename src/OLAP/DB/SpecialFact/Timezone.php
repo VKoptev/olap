@@ -42,11 +42,6 @@ class Timezone extends Fact {
         return $this->getDimension($this->object()->getSpecialDimension());
     }
 
-    public function onParentSetData($args) {
-
-        // don't set data
-    }
-
     public function onSetAllData($args) {
 
         $currentTZ = date_default_timezone_get();
@@ -114,6 +109,24 @@ class Timezone extends Fact {
                 $this->pushData($doc);
             }
         }
+        date_default_timezone_set($currentTZ);
+    }
+
+    public function setData(array $data) {
+
+        $currentTZ = date_default_timezone_get();
+        date_default_timezone_set("UTC");
+
+        $keys = $this->getKeys();
+        $fields = array_diff($keys, $this->getParent()->getKeys());
+        list($field,) = each($fields);
+        $dimension = $this->getDimension($field);
+        $list = $dimension->getIds($data);
+        foreach ($list as $value) {
+            $data[$dimension->getTableName()] = $value["{$dimension->getTableName()}_id"];
+            $this->pushData($data);
+        }
+
         date_default_timezone_set($currentTZ);
     }
 

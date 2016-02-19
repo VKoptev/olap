@@ -78,6 +78,9 @@ class Fact extends Base {
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_TRUNCATE_FACT, $this->getTableName());
         $this->db()->exec("TRUNCATE {$this->getTableName()} CASCADE");
+        foreach ($this->getDimensions() as $dimension) {
+            $dimension->truncate();
+        }
     }
 
     /**

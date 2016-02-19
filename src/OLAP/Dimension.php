@@ -38,7 +38,7 @@ class Dimension extends Model {
 
     public function getIndex() {
 
-        return empty($this->options['index']) ? 'hash' : $this->options['index'];
+        return empty($this->options['index']) ? 'btree' : $this->options['index'];
     }
 
     /**

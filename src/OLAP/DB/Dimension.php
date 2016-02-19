@@ -40,32 +40,36 @@ class Dimension extends Base {
     public function getId(array $data) {
 
         $value = $this->object()->mapValue($data);
+
         if ($value === null) {
-            $id = $this->db()->fetchColumn("SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} IS NULL");
-        } else {
-            $id = $this->db()->fetchColumn(
-                "SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} = :value",
-                [':value' => $value]
-            );
+            return null;
         }
-        if (empty($id)) {
-            $values = [$this->sender()->valueField() => ':value'];
-            $params = [':value' => $value];
 
-            if ($parent = $this->getParent()) {
-                $pid = "{$parent->getTableName()}_id";
-                $values[$pid] = ":$pid";
-                $params[":$pid"] = $parent->getId($data);
-            }
+        $values = [$this->sender()->valueField() => ':value'];
+        $params = [':value' => $value];
 
-            $fields = implode(',', array_keys($values));
-            $values = implode(',', array_values($values));
-            $id = $this->db()->fetchColumn(
-                "INSERT INTO public.{$this->getTableName()} ($fields) VALUES ($values) RETURNING id",
-                $params
-            );
+        if ($parent = $this->getParent()) {
+            $pid = "{$parent->getTableName()}_id";
+            $values[$pid] = ":$pid";
+            $params[":$pid"] = $parent->getId($data);
         }
-        return $id;
+
+        $fields = implode(',', array_keys($values));
+        $values = implode(',', array_values($values));
+
+        $sql = "WITH new_row as (" .
+                    "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($values)" .
+                    "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING " .
+                    "RETURNING id " .
+               ") SELECT id FROM new_row UNION ".
+               "SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} = :value"
+        ;
+        return $this->db()->fetchColumn($sql, $params);
+    }
+
+    public function truncate() {
+
+        $this->db()->exec("TRUNCATE {$this->getTableName()} CASCADE");
     }
 
     protected function createTable() {
@@ -77,7 +81,7 @@ class Dimension extends Base {
             "{$this->sender()->valueField()} {$this->getType()->getTableName()}"
         ];
         $constraints    = [
-            "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)"
+            "CONSTRAINT {$this->getTableName()}_pkey PRIMARY KEY (id)",
         ];
         if ($this->object()->isDenormalized()) {
             $fields[] = $this->sender()->dataField() . ' ' . $this->sender()->getDataType()->getTableName();
@@ -86,6 +90,9 @@ class Dimension extends Base {
             $parent = $this->sender()->getDimension($parent);
             $fields[] = "{$parent->getTableName()}_id integer";
             $constraints[] = $this->getFK($parent->getTableName());
+            $constraints[] = "CONSTRAINT {$this->valueConstraint()} UNIQUE ({$this->sender()->valueField()}, {$parent->getTableName()}_id)";
+        } else {
+            $constraints[] = "CONSTRAINT {$this->valueConstraint()} UNIQUE ({$this->sender()->valueField()})";
         }
         $fields         = implode(",", $fields);
         $constraints    = implode(",", $constraints);
@@ -106,5 +113,10 @@ class Dimension extends Base {
             $parent = $this->sender()->getDimension($parent);
         }
         return $parent ?: null;
+    }
+
+    protected function valueConstraint() {
+
+        return "{$this->getTableName()}_{$this->sender()->valueField()}_uniq";
     }
 }
