@@ -39,7 +39,7 @@ class Dimension extends Base {
 
     public function getId(array $data) {
 
-        $value = $this->object()->mapValue($data);
+        $value = $this->mapValue($data);
 
         if ($value === null) {
             return null;
@@ -70,6 +70,15 @@ class Dimension extends Base {
     public function truncate() {
 
         $this->db()->exec("TRUNCATE {$this->getTableName()} CASCADE");
+    }
+
+    /**
+     * @param array $data
+     * @return mixed
+     */
+    public function mapValue($data) {
+
+        return $this->object()->mapValue($data);
     }
 
     protected function createTable() {

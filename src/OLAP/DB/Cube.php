@@ -27,6 +27,9 @@ class Cube extends Base {
      */
     private $userQueries;
 
+    private $slice = [];
+    private $drill = null;
+
     /**
      * @param Connection $db
      * @param \OLAP\Cube $object
@@ -36,14 +39,19 @@ class Cube extends Base {
 
         parent::__construct($db, $object, $sender);
 
+        $defaultDrill = null;
         $this->facts = [];
         foreach ($this->object()->getFacts() as $fact) {
             $class = Fact::class;
             if ($fact->isSpecial()) {
                 $class = $this->getSpecialFact($fact);
             }
+            if (!$defaultDrill && $fact->isDefaultDrill()) {
+                $defaultDrill = $fact->getName();
+            }
             $this->facts[$fact->getName()] = new $class($this->db(), $fact, $this);
         }
+        $this->drill = $defaultDrill;
         $this->dataType = new Type($this->db(), $this->object()->getDataType());
     }
 
@@ -147,6 +155,36 @@ class Cube extends Base {
     public function getAggregateLinear($alias = '') {
 
         return $this->getUserQuery('aggregate_linear', $this->getDataType()->object()->getAggregateLinear(), ['%ALIAS%' => $alias ? "$alias." : '']);
+    }
+
+    /**
+     * @param $slice
+     * @return $this
+     */
+    public function slice($slice) {
+
+        $this->slice = $slice;
+        return $this;
+    }
+
+    /**
+     * @param $drill
+     * @return $this
+     */
+    public function drill($drill) {
+
+        foreach ($this->getFacts() as $fact) {
+            if ($fact->isDrill($drill)) {
+                $this->drill = $fact->object()->getName();
+                break;
+            }
+        }
+        return $this;
+    }
+
+    public function get() {
+
+        return $this->getFact($this->drill)->get($this->slice);
     }
 
     /**

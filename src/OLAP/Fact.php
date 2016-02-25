@@ -62,6 +62,9 @@ class Fact extends Model {
         return $this->dataType;
     }
 
+    /**
+     * @return string
+     */
     public function getParent() {
 
         $parent = $this->getOption('parent', null);
@@ -71,6 +74,23 @@ class Fact extends Model {
     public function isSpecial() {
 
         return $this->getOption('special', false);
+    }
+
+    /**
+     * @return bool
+     */
+    public function isDefaultDrill() {
+
+        return (bool)$this->getOption('default_drill', false);
+    }
+
+    /**
+     * @param string $drill
+     * @return bool
+     */
+    public function isDrill($drill) {
+
+        return $this->name === $drill;
     }
 
     protected function makeName($name) {

@@ -132,6 +132,43 @@ class Fact extends Base {
         }
     }
 
+    /**
+     * @return bool
+     */
+    public function isDefaultDrill() {
+
+        return $this->object()->isDefaultDrill();
+    }
+
+    /**
+     * @param string $drill
+     * @return bool
+     */
+    public function isDrill($drill) {
+
+        return $this->object()->isDrill($drill);
+    }
+
+    public function get($filter) {
+
+        $params = [];
+        $where = [];
+        $joins = [];
+        $used = [];
+
+        $this->fillGetKeys($filter, $used, $joins, $where, $params);
+        $this->fillParentKeys($this->getDimensions(), $filter, $used, $joins, $where, $params);
+
+        $where = empty($where) ? '' : "WHERE (" . implode(') AND (', $where) . ')';
+        $getter = $this->sender()->getAggregate($this->getTableName());
+
+        $sql = "SELECT {$getter->getQuery()} FROM {$this->getTableName()} " .
+            implode(' ', $joins) . " $where"
+        ;
+
+        return $this->db()->fetchAll($sql, array_merge($getter->getParams(), $params));
+    }
+
     protected function createTable() {
 
         list($fields, $constraints) = $this->getTableDefinition();
@@ -244,5 +281,121 @@ class Fact extends Base {
         $data[$this->getTableName()] = $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$query->getQuery()} $where RETURNING id", $params);
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
+    }
+
+    protected function pushWhere($field, $value, &$where, &$params) {
+
+        $paramKey = ':' . str_replace('.', '_', $field);
+        if (is_array($value)) {
+            if ($value === array_values($value)) { // array
+                $this->pushOperator($field, '$in', $value, $where, $params);
+            } else {
+                foreach ($value as $operator => $value) {
+                    $this->pushOperator($field, $operator, $value, $where, $params);
+                }
+            }
+        } else {
+            $where[] = "$field = $paramKey";
+            $params[$paramKey] = $value;
+        }
+    }
+
+    protected function pushOperator($field, $operator, $value, &$where, &$params) {
+
+        $paramKey = ':' . str_replace('.', '_', $field);
+        switch ($operator) {
+            case '$in':
+                $list = [];
+                $i = 0;
+                foreach ($value as $val) {
+                    $list[] = "{$paramKey}_$i";
+                    $params["{$paramKey}_$i"] = $val;
+                    ++$i;
+                }
+                $list = implode(',', $list);
+                $where[] = "$field IN ($list)";
+                break;
+            case '$gt':
+            case '$lt':
+            case '$gte':
+            case '$lte':
+                $i = 0;
+                $key = $paramKey;
+                while (isset($params[$key])) {
+                    $key = "{$paramKey}_$i";
+                    ++$i;
+                }
+                $paramKey = $key;
+                $op = $operator{1} == 'l' ? '<' : '>';
+                if (strlen($operator) > 3) {
+                    $op .= '=';
+                }
+                $where[] = "$field $op $paramKey";
+                $params[$paramKey] = $value;
+                break;
+        }
+    }
+
+    protected function fillGetKeys($filter, &$used, &$joins, &$where, &$params) {
+
+        foreach ($this->getKeys() as $dimensionName => $dimensionId) {
+
+            $dimension = $this->getDimension($dimensionName);
+            $value = $dimension->mapValue($filter);
+            if ($value !== null) {
+                $used[$dimensionName] = true;
+                $joins[$dimensionName] = "INNER JOIN {$dimensionName} ON {$dimensionName}.id = {$this->getTableName()}.{$dimensionId}";
+                $this->pushWhere("{$dimensionName}.{$this->valueField()}", $value, $where, $params);
+            }
+        }
+    }
+
+    /**
+     * @param Dimension[] $dimensions
+     * @param array $filter
+     * @param array $used
+     * @param array $joins
+     * @param array $where
+     * @param array $params
+     */
+    protected function fillParentKeys($dimensions, $filter, &$used, &$joins, &$where, &$params) {
+
+        foreach ($dimensions as $dimensionName => $dimension) {
+            $value = $dimension->mapValue($filter);
+            if (empty($used[$dimensionName]) && $value) {
+                // there are only parents
+                $used[$dimensionName] = true;
+                $this->pushWhere("{$dimensionName}.{$this->valueField()}", $value, $where, $params);
+                $this->fillParentKeysByDimension($dimension, $dimensions, $used, $joins, $where, $params);
+            }
+        }
+    }
+
+    /**
+     * @param Dimension $parent
+     * @param Dimension[] $dimensions
+     * @param array $used
+     * @param array $joins
+     * @param array $where
+     * @param array $params
+     */
+    protected function fillParentKeysByDimension($parent, $dimensions, &$used, &$joins, &$where, &$params) {
+
+        $keys = $this->getKeys();
+        foreach ($dimensions as $dimensionName => $dimension) {
+
+            if ($dimension->object()->getParent() === $parent->getTableName()) {
+                if (empty($used[$dimensionName])) {
+                    $used[$dimensionName] = true;
+                    if (isset($keys[$dimensionName])) {
+                        $joins[$dimensionName] = "INNER JOIN {$dimensionName} ON {$dimensionName}.id = {$this->getTableName()}.{$dimensionName}_id";
+                        ;
+                    } else {
+                        $this->fillParentKeysByDimension($dimension, $dimensions, $used, $joins, $where, $params);
+                    }
+                }
+                $joins[$parent->getTableName()] = "INNER JOIN {$parent->getTableName()} ON {$parent->getTableName()}.id={$dimensionName}.{$parent->getTableName()}_id";
+            }
+        }
     }
 }

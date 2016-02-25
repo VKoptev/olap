@@ -13,7 +13,7 @@ class Server {
     private $db;
 
     /**
-     * @var Cube
+     * @var DB\Cube
      */
     private $cube;
 

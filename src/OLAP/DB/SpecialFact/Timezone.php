@@ -164,4 +164,15 @@ class Timezone extends Fact {
         }
         return $keys;
     }
+
+    protected function fillParentKeys($dimensions, $filter, &$used, &$joins, &$where, &$params) {
+
+        $parents = $this->getParent()->getDimensions();
+        if (($dimension = $this->object()->getSpecialDimension()) && isset($parents[$dimension])) {
+            unset($parents[$dimension]);
+            $dimensions = array_merge($dimensions, $parents);
+        }
+
+        parent::fillParentKeys($dimensions, $filter, $used, $joins, $where, $params);
+    }
 }

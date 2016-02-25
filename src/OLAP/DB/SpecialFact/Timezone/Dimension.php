@@ -75,6 +75,25 @@ class Dimension extends \OLAP\DB\Dimension {
         return $this->getInfo($values);
     }
 
+    /**
+     * @param array $data
+     * @return mixed
+     */
+    public function mapValue($data) {
+
+        $result = $this->object()->mapValue($data);
+        if ($result && $this->getParent()) {
+            if (is_array($result)) {
+                foreach ($result as &$el) {
+                    $el = (new \DateTime($el))->format($this->format);
+                }
+            } else {
+                $result = (new \DateTime($result))->format($this->format);
+            }
+        }
+        return $result;
+    }
+
     protected function getTimezones() {
 
         if (empty(self::$timezones)) {
