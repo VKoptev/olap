@@ -362,7 +362,7 @@ class Fact extends Base {
 
         foreach ($dimensions as $dimensionName => $dimension) {
             $value = $dimension->mapValue($filter);
-            if (empty($used[$dimensionName]) && $value) {
+            if (empty($used[$dimensionName]) && $value !== null) {
                 // there are only parents
                 $used[$dimensionName] = true;
                 $this->pushWhere("{$dimensionName}.{$this->valueField()}", $value, $where, $params);
