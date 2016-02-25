@@ -59,20 +59,16 @@ class Dimension extends \OLAP\DB\Dimension {
             $dateTime->setTimezone($tz);
             $values[$dateTime->format($this->format)] = true;
         }
-
-        return $this->getInfo(array_keys($values));
-    }
-
-    public function getInfoByRange($min, $max) {
-
-        $tzs = $this->getTimezones();
-        $start = new \DateTime( (new \DateTime($min, $this->getTimezoneByOffset(min($tzs))))->format($this->format) );
-        $end = new \DateTime( (new \DateTime($max, $this->getTimezoneByOffset(max($tzs))))->format($this->format) );
-        $values = [];
-        for ($i = $start; $i->getTimestamp() <= $end->getTimestamp(); $i->modify($this->object()->getOption('minimal-offset', '+1day'))) {
-            $values[] = $i->format($this->format);
+        $result = $this->getInfo(array_keys($values));
+        foreach ($result as $i => &$row) {
+            $dateTime->setTimezone($row['timezone']);
+            $current = new \DateTime($row['value'], $row['timezone']);
+            if ($current->format($this->format) !== $dateTime->format($this->format)) {
+                unset($result[$i]);
+            }
         }
-        return $this->getInfo($values);
+
+        return array_values($result);
     }
 
     /**
