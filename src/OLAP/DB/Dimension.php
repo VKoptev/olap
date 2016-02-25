@@ -39,13 +39,11 @@ class Dimension extends Base {
 
     public function getId(array $data) {
 
-        $value = $this->mapValue($data);
+        $value = $this->mapValue($data) ?: '';
 
-        if ($value === null) {
-            return null;
-        }
+        $valueParam = "CAST(COALESCE(NULLIF(:value, ''), '0') as {$this->getType()->getTableName()})";
 
-        $values = [$this->sender()->valueField() => ':value'];
+        $values = [$this->sender()->valueField() => $valueParam];
         $params = [':value' => $value];
 
         if ($parent = $this->getParent()) {
@@ -62,7 +60,7 @@ class Dimension extends Base {
                     "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING " .
                     "RETURNING id " .
                ") SELECT id FROM new_row UNION ".
-               "SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} = :value"
+               "SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} = {$valueParam}"
         ;
         return $this->db()->fetchColumn($sql, $params);
     }

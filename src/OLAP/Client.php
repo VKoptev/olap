@@ -20,7 +20,7 @@ class Client {
     public function __construct(Connection $connection, Cube $cube) {
 
         $this->db = $connection;
-        $this->cube = new DB\Cube($this->db, $cube);
+        $this->cube = CubeFactory::getCube($connection, $cube);
     }
 
     public function slice($filter) {
