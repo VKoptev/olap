@@ -140,6 +140,15 @@ class Cube extends Base {
     }
 
     /**
+     * @param string $value
+     * @return UserQuery
+     */
+    public function getPushMethod($value, $alias = '') {
+
+        return $this->getUserQuery('push_method', $this->getDataType()->object()->getPushMethod(), ['value' => $value, '%ALIAS%' => $alias ? "$alias." : ''], 0, false);
+    }
+
+    /**
      * @param string $alias
      * @return UserQuery
      */
@@ -194,7 +203,7 @@ class Cube extends Base {
      * @param int $i
      * @return UserQuery
      */
-    protected function getUserQuery($query, $str, array $data = [], $i = 0) {
+    protected function getUserQuery($query, $str, array $data = [], $i = 0, $toParam = true) {
 
         if (empty($this->userQueries[$query])) {
             $params = [];
@@ -206,9 +215,13 @@ class Cube extends Base {
                     } elseif ($match === 'DATA_TYPE') {
                         $str = str_replace("%$match%", $this->getDataType()->object()->getName(), $str);
                     } elseif (array_key_exists($match, $data)) {
-                        $str = str_replace("%$match%", ':param_' . $i, $str);
-                        $params[':param_' . $i] = $data[$match];
-                        ++$i;
+                        if ($toParam) {
+                            $str = str_replace("%$match%", ':param_' . $i, $str);
+                            $params[':param_' . $i] = $data[$match];
+                            ++$i;
+                        } else {
+                            $str = str_replace("%$match%", $data[$match], $str);
+                        }
                     }
                 }
             }
