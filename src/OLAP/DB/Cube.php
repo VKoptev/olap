@@ -134,7 +134,7 @@ class Cube extends Base {
      * @param array $data
      * @return UserQuery
      */
-    public function getPusher(array $data) {
+    public function getPushData(array $data) {
 
         return $this->getUserQuery('pusher', $this->getDataType()->object()->getPushData(), $data);
     }

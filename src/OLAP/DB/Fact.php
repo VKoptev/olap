@@ -99,7 +99,6 @@ class Fact extends Base
      */
     public function dataField()
     {
-
         return $this->sender()->dataField();
     }
 
@@ -108,7 +107,6 @@ class Fact extends Base
      */
     public function valueField()
     {
-
         return $this->sender()->valueField();
     }
 
@@ -118,31 +116,31 @@ class Fact extends Base
      */
     public function getDimension($name)
     {
-
         return empty($this->dimensions[$name]) ? false : $this->dimensions[$name];
     }
 
     public function setData(array $data)
     {
-
-        $where = [];
-        $params = [];
-        $fields = $this->getKeys();
-        foreach ($fields as $key => $field) {
-            $dimension = $this->getDimension($key);
-            $value = $dimension ? $dimension->getId($data) : (array_key_exists($key, $data) ? $data[$key] : null);
-            $data[$key] = $value;
-            $params[":$key"] = $value;
-            $where[] = "$fields[$key] " . ($value === null ? 'IS NULL' : "= :$key");
+        $setter = $this->sender()->getPushData($data);
+        $values = [$setter->getQuery()];
+        $params = $setter->getParams();
+        foreach ($this->getStrictDimensions() as $dimension) {
+            while($dimension) {
+                $key = ":{$dimension->getTableName()}_value";
+                $params[$key] = $dimension->mapValue($data);
+                $values[] = $key;
+                $dimension = $dimension->getParent();
+            }
         }
-        $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
 
-        $this->updateData($this->sender()->getPusher($data), $fields, $where, $params, $data);
+        $values = implode(', ', $values);
+        $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
+
+        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
     }
 
     public function onParentSetData($args)
     {
-
         if (!empty($args['data'])) {
             $this->setData($args['data']);
         }
@@ -153,7 +151,6 @@ class Fact extends Base
      */
     public function isDefaultDrill()
     {
-
         return $this->object()->isDefaultDrill();
     }
 
@@ -163,13 +160,11 @@ class Fact extends Base
      */
     public function isDrill($drill)
     {
-
         return $this->object()->isDrill($drill);
     }
 
     public function get($filter)
     {
-
         $params = [];
         $where = [];
         $joins = [];
@@ -186,9 +181,15 @@ class Fact extends Base
         return $this->db()->fetchAll($sql, array_merge($getter->getParams(), $params));
     }
 
+    /**
+     * ===================== SET =====================
+     */
+
+    /**
+     * @inheritdoc
+     */
     protected function createTable()
     {
-
         list($fields, $constraints) = $this->getTableDefinition();
 
         $fields = implode(",", $fields);
@@ -199,20 +200,17 @@ class Fact extends Base
 
     protected function dimensionClass()
     {
-
         return Dimension::class;
     }
 
     protected function addFactId()
     {
-
         // virtual
         return true;
     }
 
     protected function checkTable()
     {
-
         list($fields, $constraints) = $this->getTableDefinition();
         $table = $this->describeTable();
 
@@ -267,41 +265,126 @@ class Fact extends Base
         return [$fields, $constraints];
     }
 
+    protected function valueConstraint()
+    {
+        return "{$this->getTableName()}_unique";
+    }
+
+
+    protected function setterFunctionName()
+    {
+        return "get_{$this->getTableName()}_id";
+    }
+    /**
+     * Check push fact value function existence
+     */
+    protected function checkSetter()
+    {
+        $params = [$this->getDataType()->getTableName()];
+        $fields = [$this->sender()->dataField() => '$1'];
+        $declare = ["DECLARE result integer; "];
+        $setVars = [];
+        $i = 1; // value
+        foreach ($this->getStrictDimensions() as $dimension) {
+
+            $this->addDimension($dimension, $i, $params, $declare, $fields, $setVars);
+        }
+
+        $whereValues = [];
+        foreach ($fields as $key => $value) {
+            if ($key !== $this->sender()->dataField()) {
+                $whereValues[] = "public.{$this->getTableName()}.$key = $value";
+            }
+        }
+        $whereValues = implode(' AND ', $whereValues);
+        $insertValues = implode(', ', $fields);
+        $fields = implode(', ', array_keys($fields));
+
+        $params = implode(', ', $params);
+        $declare = implode(' ', $declare);
+        $setVars = implode(' ', $setVars);
+
+
+        $pushMethod = $this->sender()->getPushMethod('$1', "public.{$this->getTableName()}");
+        $sql = "CREATE OR REPLACE FUNCTION {$this->setterFunctionName()}({$params}) " . "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
+            "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
+            "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} " .
+            "DO UPDATE SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} " .
+            "RETURNING id INTO result; " .
+            "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
+
+        $this->db()->exec($sql);
+    }
+
+    /**
+     * Add dimension to function definition
+     * @param Dimension $dimension
+     * @param $i
+     * @param $params
+     * @param $declare
+     * @param $fields
+     * @param $setVars
+     * @param bool|true $key
+     */
+    protected function addDimension(Dimension $dimension, &$i, &$params, &$declare, &$fields, &$setVars, $key = true)
+    {
+        $i++;
+        $params[] = $dimension->getType()->getTableName();
+        if ($key) {
+            $declare[] = "DECLARE {$dimension->getTableName()}_id_var integer; ";
+            $fields["{$dimension->getTableName()}_id"] = "{$dimension->getTableName()}_id_var";
+            $parentParams = [];
+            for ($j = 0; $j < $dimension->getSetterParamsCount(); $j++) {
+                $parentParams[] = '$' . ($j + $i);
+            }
+            $parentParams = implode(', ', $parentParams);
+            $setVars[] = "SELECT * INTO {$dimension->getTableName()}_id_var FROM get_{$dimension->getTableName()}_id({$parentParams}); ";
+        }
+
+        if ($parent = $dimension->getParent()) {
+            $this->addDimension($parent, $i, $params, $declare, $fields, $setVars, false);
+        }
+    }
+
     protected function getKeys()
     {
-        $key = [];
-        $parents = [];
-        foreach ($this->getDimensions() as $dimension) {
-            $key[$dimension->getTableName()] = "{$dimension->getTableName()}_id";
-            if ($parent = $dimension->object()->getParent()) {
-                $parents[$parent] = true;
-            }
+        $result = [];
+        foreach ($this->getStrictDimensions() as $dimension) {
+            $result[$dimension->getTableName()] = "{$dimension->getTableName()}_id";
         }
 
         if ($this->addFactId() && $parent = $this->getParent()) {
-            $key[$parent->getTableName()] = "{$parent->getTableName()}_id";
+            $result[$parent->getTableName()] = "{$parent->getTableName()}_id";
         }
-        $key = array_diff_key($key, $parents);
-        return $key;
+        return $result;
     }
 
-    protected function updateData(UserQuery $query, $fields, $where, $params, $data)
+    /**
+     * @return Dimension[]
+     */
+    protected function getStrictDimensions()
     {
-        $values = ':' . implode(',:', array_keys($fields));
-        $fields = implode(',', array_values($fields));
-        $params = array_merge($params, $query->getParams());
-        try {
-            $this->db()->fetchColumn("INSERT INTO public.{$this->getTableName()} ($fields) SELECT $values WHERE NOT EXISTS(SELECT 1 FROM public.{$this->getTableName()} $where)",
-                $params);
-        } catch (DBALException $e) {
-            // ignore it - update in any case
+        $result = [];
+        $parents = [];
+        foreach ($this->getDimensions() as $dimension) {
+            $result[$dimension->getTableName()] = $dimension;
+            if ($parent = $dimension->getParent()) {
+                $parents[$parent->getTableName()] = true;
+            }
         }
-        $data[$this->getTableName()] = $this->db()->fetchColumn("UPDATE public.{$this->getTableName()} SET {$query->getQuery()} $where RETURNING id",
-            $params);
-
-        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
+        return array_diff_key($result, $parents);
     }
 
+    /**
+     * ===================== GET =====================
+     */
+
+    /**
+     * @param $field
+     * @param $value
+     * @param $where
+     * @param $params
+     */
     protected function pushWhere($field, $value, &$where, &$params)
     {
         $paramKey = ':' . str_replace('.', '_', $field);
@@ -400,7 +483,6 @@ class Fact extends Base
      */
     protected function fillParentKeysByDimension($parent, $dimensions, &$used, &$joins, &$where, &$params)
     {
-
         $keys = $this->getKeys();
         foreach ($dimensions as $dimensionName => $dimension) {
 
@@ -415,70 +497,6 @@ class Fact extends Base
                 }
                 $joins[$parent->getTableName()] = "INNER JOIN {$parent->getTableName()} ON {$parent->getTableName()}.id={$dimensionName}.{$parent->getTableName()}_id";
             }
-        }
-    }
-
-    protected function valueConstraint() {
-
-        return "{$this->getTableName()}_unique";
-    }
-
-    protected function checkSetter()
-    {
-        $params = [$this->getDataType()->getTableName()];
-        $fields = [$this->sender()->dataField() => '$1'];
-        $declare = ["DECLARE result integer; "];
-        $setVars = [];
-        $i = 1; // value
-        foreach ($this->getKeys() as $key => $field) {
-
-            $this->addDimension($this->getDimension($key), $i, $params, $declare, $fields, $setVars);
-        }
-
-        $whereValues = [];
-        foreach ($fields as $key => $value) {
-            if ($key !== $this->sender()->dataField()) {
-                $whereValues[] = "public.{$this->getTableName()}.$key = $value";
-            }
-        }
-        $whereValues = implode(' AND ', $whereValues);
-        $insertValues = implode(', ', $fields);
-        $fields = implode(', ', array_keys($fields));
-
-        $params = implode(', ', $params);
-        $declare = implode(' ', $declare);
-        $setVars = implode(' ', $setVars);
-
-
-        $pushMethod = $this->sender()->getPushMethod('$1', "public.{$this->getTableName()}");
-        $sql = "CREATE OR REPLACE FUNCTION get_{$this->getTableName()}_id({$params}) " . "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
-                    "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
-                    "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} " .
-                    "DO UPDATE SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} " .
-                    "RETURNING id INTO result; " .
-                "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
-
-        $this->db()->exec($sql);
-    }
-
-    protected function addDimension(Dimension $dimension, &$i, &$params, &$declare, &$fields, &$setVars, $key = true)
-    {
-
-        $i++;
-        $params[] = $dimension->getType()->getTableName();
-        if ($key) {
-            $declare[] = "DECLARE {$dimension->getTableName()}_id_var integer; ";
-            $fields["{$dimension->getTableName()}_id"] = "{$dimension->getTableName()}_id_var";
-            $parentParams = [];
-            for ($j = 0; $j < $dimension->getSetterParamsCount(); $j++) {
-                $parentParams[] = '$' . ($j + $i);
-            }
-            $parentParams = implode(', ', $parentParams);
-            $setVars[] = "SELECT * INTO {$dimension->getTableName()}_id_var FROM get_{$dimension->getTableName()}_id({$parentParams}); ";
-        }
-
-        if ($parent = $dimension->getParent()) {
-            $this->addDimension($parent, $i, $params, $declare, $fields, $setVars, false);
         }
     }
 }
