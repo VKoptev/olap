@@ -145,7 +145,7 @@ class Cube extends Base {
      */
     public function getPushMethod($value, $alias = '') {
 
-        return $this->getUserQuery('push_method', $this->getDataType()->object()->getPushMethod(), ['value' => $value, '%ALIAS%' => $alias ? "$alias." : ''], 0, false);
+        return $this->getUserQuery('push_method:' . $alias, $this->getDataType()->object()->getPushMethod(), ['value' => $value, '%ALIAS%' => $alias ? "$alias." : ''], 0, false);
     }
 
     /**

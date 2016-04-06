@@ -124,6 +124,10 @@ class Fact extends Base
         $setter = $this->sender()->getPushData($data);
         $values = [$setter->getQuery()];
         $params = $setter->getParams();
+        if ($parent = $this->getParent()) {
+            $values[] = ":{$parent->getTableName()}_id";
+            $params[":{$parent->getTableName()}_id"] = $data["{$parent->getTableName()}_id"];
+        }
         foreach ($this->getStrictDimensions() as $dimension) {
             while($dimension) {
                 $key = ":{$dimension->getTableName()}_value";
@@ -134,6 +138,11 @@ class Fact extends Base
         }
 
         $values = implode(', ', $values);
+        if ($this->getParent()) {
+
+//            var_dump("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
+//            die();
+        }
         $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
@@ -285,8 +294,14 @@ class Fact extends Base
         $declare = ["DECLARE result integer; "];
         $setVars = [];
         $i = 1; // value
-        foreach ($this->getStrictDimensions() as $dimension) {
 
+        if ($parent = $this->getParent()) {
+            $params[] = "integer";
+            $fields["{$parent->getTableName()}_id"] = '$2';
+            $i++;
+        }
+
+        foreach ($this->getStrictDimensions() as $dimension) {
             $this->addDimension($dimension, $i, $params, $declare, $fields, $setVars);
         }
 
