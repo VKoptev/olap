@@ -68,7 +68,6 @@ class Fact extends Base
      */
     public function checkStructure()
     {
-
         foreach ($this->getDimensions() as $dimension) {
             $dimension->checkStructure();
         }
@@ -80,13 +79,11 @@ class Fact extends Base
 
     public function onTruncate($args)
     {
-
         $this->truncate();
     }
 
     public function truncate()
     {
-
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_TRUNCATE_FACT, $this->getTableName());
         $this->db()->exec("TRUNCATE {$this->getTableName()} CASCADE");
         foreach ($this->getDimensions() as $dimension) {

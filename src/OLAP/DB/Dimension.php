@@ -46,28 +46,6 @@ class Dimension extends Base
         $this->checkSetter();
     }
 
-    public function getId(array $data)
-    {
-        $value = $this->mapValue($data) ?: '';
-
-        $valueParam = "CAST(COALESCE(NULLIF(:value, ''), '0') as {$this->getType()->getTableName()})";
-
-        $values = [$this->sender()->valueField() => $valueParam];
-        $params = [':value' => $value];
-
-        if ($parent = $this->getParent()) {
-            $pid = "{$parent->getTableName()}_id";
-            $values[$pid] = ":$pid";
-            $params[":$pid"] = $parent->getId($data);
-        }
-
-        $fields = implode(',', array_keys($values));
-        $values = implode(',', array_values($values));
-
-        $sql = "WITH new_row as (" . "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($values)" . "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING " . "RETURNING id " . ") SELECT id FROM new_row UNION " . "SELECT id FROM public.{$this->getTableName()} WHERE {$this->sender()->valueField()} = {$valueParam}";
-        return $this->db()->fetchColumn($sql, $params);
-    }
-
     public function truncate()
     {
         $this->db()->exec("TRUNCATE {$this->getTableName()} CASCADE");
@@ -136,7 +114,14 @@ class Dimension extends Base
         }
         $whereValues = implode(' AND ', $whereValues);
 
-        $sql = "CREATE OR REPLACE FUNCTION get_{$this->getTableName()}_id({$params}) " . "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " . "WITH new_row as ( " . "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " . "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING " . "RETURNING id " . ") SELECT x.id INTO result FROM ( " . "SELECT id FROM new_row UNION " . "SELECT id FROM public.{$this->getTableName()} WHERE {$whereValues} " . ") x; " . "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
+        $sql = "CREATE OR REPLACE FUNCTION get_{$this->getTableName()}_id({$params}) " .
+            "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
+            "WITH new_row as ( " .
+            "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
+            "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING " .
+            "RETURNING id " . ") SELECT x.id INTO result FROM ( " .
+            "SELECT id FROM new_row UNION " .
+            "SELECT id FROM public.{$this->getTableName()} WHERE {$whereValues} " . ") x; " . "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
 
         $this->db()->exec($sql);
     }

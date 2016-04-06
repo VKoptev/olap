@@ -45,31 +45,8 @@ class Timezone extends Fact {
         $currentTZ = date_default_timezone_get();
         date_default_timezone_set("UTC");
 
-        $keys = $this->getKeys();
-        $fields = array_diff($keys, $this->getParent()->getKeys());
-        list($field,) = each($fields);
-        $dimension = $this->getDimension($field);
-        $list = $dimension->getIds($data);
-        foreach ($list as $value) {
-            $data[$dimension->getTableName()] = $value["{$dimension->getTableName()}_id"];
-            $this->pushData($data);
-        }
 
         date_default_timezone_set($currentTZ);
-    }
-
-    public function pushData(array $data) {
-
-        $where  = [];
-        $params = [];
-        $fields = $this->getKeys();
-        foreach ($fields as $key => $field) {
-            $params[":$key"] = $data[$key];
-            $where[] = "$field " . ($data[$key] === null ? 'IS NULL' : "= :$key");
-        }
-        $where = $where ? 'WHERE (' . implode(') AND (', $where) . ')' : '';
-
-        $this->updateData($this->sender()->getPusher($data), $fields, $where, $params, $data);
     }
 
     protected function dimensionClass() {
@@ -82,15 +59,11 @@ class Timezone extends Fact {
         return false;
     }
 
-    protected function getKeys() {
+    protected function checkSetter()
+    {
 
-        $keys = parent::getKeys();
-        $parentKeys = $this->getParent()->getKeys();
-        if (($dimension = $this->object()->getSpecialDimension()) && isset($parentKeys[$dimension])) {
-            unset($parentKeys[$dimension]);
-            $keys = array_merge($keys, $parentKeys);
-        }
-        return $keys;
+//        var_dump(123);
+//        die();
     }
 
     protected function fillParentKeys($dimensions, $filter, &$used, &$joins, &$where, &$params) {
