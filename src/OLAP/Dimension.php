@@ -2,7 +2,8 @@
 
 namespace OLAP;
 
-class Dimension extends Model {
+class Dimension extends Model
+{
 
     const PREFIX = 'dimension_';
 
@@ -11,8 +12,8 @@ class Dimension extends Model {
      */
     private $type;
 
-    public function __construct($name, $type, $options = []) {
-
+    public function __construct($name, $type, $options = [])
+    {
         $this->name = $name;
         $this->type = $type instanceof Type ? $type : new Type($type);
         $this->options = $options ?: [];
@@ -21,23 +22,23 @@ class Dimension extends Model {
     /**
      * @return Type
      */
-    public function getType() {
-
+    public function getType()
+    {
         return $this->type;
     }
 
-    public function isDenormalized() {
-
+    public function isDenormalized()
+    {
         return !empty($this->options['denormalized']);
     }
 
-    public function getParent() {
-
+    public function getParent()
+    {
         return empty($this->options['parent']) ? null : $this->makeName($this->options['parent']);
     }
 
-    public function getIndex() {
-
+    public function getIndex()
+    {
         return empty($this->options['index']) ? 'btree' : $this->options['index'];
     }
 
@@ -46,13 +47,18 @@ class Dimension extends Model {
      * @param array $data
      * @return mixed
      */
-    public function mapValue(array $data) {
-
-        return array_key_exists($this->name, $data) ? $data[$this->name] : null;
+    public function mapValue(array $data)
+    {
+        return (array_key_exists($this->name, $data) ? $data[$this->name] : null) ?: $this->emptyValue();
     }
 
-    protected function makeName($name) {
-
+    protected function makeName($name)
+    {
         return self::PREFIX . $name;
+    }
+
+    protected function emptyValue()
+    {
+        return array_key_exists('empty', $this->options) ? $this->options['empty'] : '';
     }
 }
