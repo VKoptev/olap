@@ -73,7 +73,6 @@ class Dimension extends Base
 
     public function getSetterParamsCount()
     {
-
         return 1 + ($this->getParent() ? $this->getParent()->getSetterParamsCount() : 0);
     }
 

@@ -4,6 +4,7 @@ namespace OLAP\DB;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DBALException;
+use OLAP\DB\SpecialFact\Timezone;
 use OLAP\Event;
 
 
@@ -135,11 +136,6 @@ class Fact extends Base
         }
 
         $values = implode(', ', $values);
-        if ($this->getParent()) {
-
-//            var_dump("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
-//            die();
-        }
         $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
@@ -281,6 +277,7 @@ class Fact extends Base
     {
         return "get_{$this->getTableName()}_id";
     }
+
     /**
      * Check push fact value function existence
      */
@@ -292,7 +289,7 @@ class Fact extends Base
         $setVars = [];
         $i = 1; // value
 
-        if ($parent = $this->getParent()) {
+        if ($this->addFactId() && $parent = $this->getParent()) {
             $params[] = "integer";
             $fields["{$parent->getTableName()}_id"] = '$2';
             $i++;
@@ -318,12 +315,7 @@ class Fact extends Base
 
 
         $pushMethod = $this->sender()->getPushMethod('$1', "public.{$this->getTableName()}");
-        $sql = "CREATE OR REPLACE FUNCTION {$this->setterFunctionName()}({$params}) " . "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
-            "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
-            "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} " .
-            "DO UPDATE SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} " .
-            "RETURNING id INTO result; " .
-            "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
+        $sql = $this->getSetterSql($params, $declare, $setVars, $fields, $insertValues, $pushMethod, $whereValues);
 
         $this->db()->exec($sql);
     }
@@ -356,6 +348,16 @@ class Fact extends Base
         if ($parent = $dimension->getParent()) {
             $this->addDimension($parent, $i, $params, $declare, $fields, $setVars, false);
         }
+    }
+
+    protected function getSetterSql($params, $declare, $setVars, $fields, $insertValues, UserQuery $pushMethod, $whereValues)
+    {
+        return "CREATE OR REPLACE FUNCTION {$this->setterFunctionName()}({$params}) " . "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
+        "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
+        "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} " .
+        "DO UPDATE SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} " .
+        "RETURNING id INTO result; " .
+        "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
     }
 
     protected function getKeys()

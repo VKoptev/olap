@@ -49,6 +49,16 @@ class Dimension extends \OLAP\DB\Dimension
     }
 
     /**
+     * @param array $data
+     * @return mixed
+     */
+    public function mapValue($data)
+    {
+        $value = $this->sender()->getSpecialDimension()->mapValue($data);
+        return (new \DateTime($value))->format($this->format);
+    }
+
+    /**
      * @return array
      */
     protected function nativeTZList()
@@ -83,5 +93,10 @@ class Dimension extends \OLAP\DB\Dimension
                 "AS $$ SELECT id FROM public.{$this->getTableName()} $$ LANGUAGE SQL;";
         }
         $this->db()->exec($sql);
+    }
+
+    public function getSetterParamsCount()
+    {
+        return 1;
     }
 }
