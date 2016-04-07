@@ -82,7 +82,7 @@ class Dimension extends \OLAP\DB\Dimension
                 "AS $$ " .
                 "DECLARE r integer; BEGIN " .
                 "FOR r IN SELECT * FROM get_{$parent->getTableName()}_id(\$1) LOOP " .
-		            "INSERT INTO public.{$this->getTableName()} (value, {$parent->getTableName()}_id) VALUES(date_trunc('year', \$1), r) " .
+		            "INSERT INTO public.{$this->getTableName()} (value, {$parent->getTableName()}_id) VALUES(date_trunc('{$this->getTrunc()}', \$1), r) " .
 			        "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO UPDATE SET id = public.{$this->getTableName()}.id " .
 			        "RETURNING id INTO r; " .
 		            "RETURN NEXT r; " .
@@ -98,5 +98,19 @@ class Dimension extends \OLAP\DB\Dimension
     public function getSetterParamsCount()
     {
         return 1;
+    }
+
+    private function getTrunc()
+    {
+        switch ($this->format) {
+            case 'Y-01-01':
+                return 'year';
+            case 'Y-m-01':
+                return 'month';
+            case 'Y-m-d':
+                return 'day';
+            default:
+                return 'second';
+        }
     }
 }
