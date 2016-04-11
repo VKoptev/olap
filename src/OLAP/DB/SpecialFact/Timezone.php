@@ -63,7 +63,9 @@ class Timezone extends Fact {
         }
 
         $values = implode(', ', $values);
+        $this->db()->beginTransaction();
         $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
+        $this->db()->commit();
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
 
