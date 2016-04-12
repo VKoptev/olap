@@ -136,9 +136,7 @@ class Fact extends Base
         }
 
         $values = implode(', ', $values);
-        $this->db()->beginTransaction();
         $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
-        $this->db()->commit();
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
     }
@@ -355,10 +353,13 @@ class Fact extends Base
     protected function getSetterSql($params, $declare, $setVars, $fields, $insertValues, UserQuery $pushMethod, $whereValues)
     {
         return "CREATE OR REPLACE FUNCTION {$this->setterFunctionName()}({$params}) " . "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
+        "UPDATE public.{$this->getTableName()} SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} RETURNING id INTO result; " .
+        "IF result IS NULL THEN " .
         "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
         "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} " .
         "DO UPDATE SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} " .
         "RETURNING id INTO result; " .
+        "END IF; " .
         "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
     }
 

@@ -78,14 +78,21 @@ class Dimension extends \OLAP\DB\Dimension
     protected function checkSetter()
     {
         if ($parent = $this->getParent()) {
+            $value = "date_trunc('{$this->getTrunc()}', $1)";
+            $whereValues = "public.{$this->getTableName()}.{$this->sender()->valueField()} = {$value} AND public.{$this->getTableName()}.{$parent->getTableName()}_id = r";
+
             $sql = "CREATE OR REPLACE FUNCTION get_{$this->getTableName()}_id(date) RETURNS setof integer " .
                 "AS $$ " .
-                "DECLARE r integer; BEGIN " .
-                "FOR r IN SELECT * FROM get_{$parent->getTableName()}_id(\$1) LOOP " .
-		            "INSERT INTO public.{$this->getTableName()} (value, {$parent->getTableName()}_id) VALUES(date_trunc('{$this->getTrunc()}', \$1), r) " .
-			        "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO UPDATE SET id = public.{$this->getTableName()}.id " .
-			        "RETURNING id INTO r; " .
-		            "RETURN NEXT r; " .
+                "DECLARE r integer; DECLARE result integer; BEGIN " .
+                "FOR r IN SELECT * FROM get_{$parent->getTableName()}_id($1) LOOP " .
+                    "SELECT id INTO result FROM public.{$this->getTableName()} WHERE {$whereValues}; " .
+                    "IF result IS NULL THEN " .
+                        "INSERT INTO public.{$this->getTableName()} ({$this->sender()->valueField()}, {$parent->getTableName()}_id) VALUES({$value}, r) " .
+                            "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO " .
+                            "UPDATE SET {$this->sender()->valueField()} = {$value} WHERE {$whereValues} " .
+			            "RETURNING id INTO result; " .
+                    "END IF; " .
+		            "RETURN NEXT result; " .
 	            "END LOOP; " .
                 "END; $$ LANGUAGE plpgsql;";
         } else {

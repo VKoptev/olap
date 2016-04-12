@@ -63,9 +63,7 @@ class Timezone extends Fact {
         }
 
         $values = implode(', ', $values);
-        $this->db()->beginTransaction();
         $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
-        $this->db()->commit();
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
 
@@ -110,10 +108,13 @@ class Timezone extends Fact {
 
         return "CREATE OR REPLACE FUNCTION {$this->setterFunctionName()}({$params}) " . "RETURNS setof integer AS $$ " . $declare . "BEGIN $setVars " .
             "FOR {$listDimension->getTableName()}_id_var IN SELECT * FROM public.get_{$listDimension->getTableName()}_id($2) LOOP " .
+            "UPDATE public.{$this->getTableName()} SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} RETURNING id INTO result; " .
+            "IF result IS NULL THEN " .
             "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
             "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} " .
             "DO UPDATE SET {$this->sender()->dataField()} = {$pushMethod->getQuery()} WHERE {$whereValues} " .
             "RETURNING id INTO result; " .
+            "END IF; " .
             "RETURN NEXT result; END LOOP;" . "END; " . "$$ LANGUAGE plpgsql;";
     }
 

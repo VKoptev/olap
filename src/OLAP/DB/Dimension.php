@@ -115,12 +115,14 @@ class Dimension extends Base
 
         $sql = "CREATE OR REPLACE FUNCTION get_{$this->getTableName()}_id({$params}) " .
             "RETURNS integer AS $$ " . $declare . "BEGIN $setVars " .
-            "WITH new_row as ( " .
-            "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
-            "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO NOTHING " .
-            "RETURNING id " . ") SELECT x.id INTO result FROM ( " .
-            "SELECT id FROM new_row UNION " .
-            "SELECT id FROM public.{$this->getTableName()} WHERE {$whereValues} " . ") x; " . "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
+            "SELECT id INTO result FROM public.{$this->getTableName()} WHERE {$whereValues}; " .
+            "IF result IS NULL THEN " .
+                "INSERT INTO public.{$this->getTableName()} ($fields) VALUES($insertValues) " .
+                    "ON CONFLICT ON CONSTRAINT {$this->valueConstraint()} DO " .
+                    "UPDATE SET {$this->sender()->valueField()} = $1 WHERE {$whereValues} " .
+                "RETURNING id INTO result; ".
+            "END IF; " .
+            "RETURN result; " . "END; " . "$$ LANGUAGE plpgsql;";
 
         $this->db()->exec($sql);
     }
