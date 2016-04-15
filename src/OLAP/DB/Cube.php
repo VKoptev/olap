@@ -128,6 +128,25 @@ class Cube extends Base {
             }
             $fact->setData($data);
         }
+
+        $sql = $data['__sql'];
+        $params = [];
+
+        foreach ($sql as $index => &$query) {
+            $i = 0;
+            $params[$index] = [];
+            foreach ($data['__params'] as $key => $value) {
+                $newKey = "$" . (++$i);
+                $query = str_replace($key, $newKey, $query, $count);
+                if ($count > 0) {
+                    $params[$index][] = $value;
+                } else {
+                    --$i;
+                }
+            }
+        }
+
+        return [$sql, $params];
     }
 
     /**

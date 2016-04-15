@@ -32,7 +32,7 @@ class Listener {
         return $this->id;
     }
 
-    public function run($args) {
+    public function run(&$args) {
 
         call_user_func($this->callback, $args);
     }

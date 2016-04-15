@@ -117,14 +117,15 @@ class Fact extends Base
         return empty($this->dimensions[$name]) ? false : $this->dimensions[$name];
     }
 
-    public function setData(array $data)
+    public function setData(array &$data)
     {
         $setter = $this->sender()->getPushData($data);
         $values = [$setter->getQuery()];
         $params = $setter->getParams();
         if ($parent = $this->getParent()) {
-            $values[] = ":{$parent->getTableName()}_id";
-            $params[":{$parent->getTableName()}_id"] = $data["{$parent->getTableName()}_id"];
+//            $values[] = ":{$parent->getTableName()}_id";
+//            $params[":{$parent->getTableName()}_id"] = $data["{$parent->getTableName()}_id"];
+            $values[] = $data["{$parent->getTableName()}_id"];
         }
         foreach ($this->getStrictDimensions() as $dimension) {
             while($dimension) {
@@ -135,13 +136,18 @@ class Fact extends Base
             }
         }
 
-        $values = implode(', ', $values);
-        $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
+        $setValues = implode(', ', $values);
+        $values[0] = 'null';
+        $idValues = implode(', ', $values);
+        $data["{$this->getTableName()}_id"] = "{$this->setterFunctionName()}($idValues)";
+        $data["__sql"][] = "SELECT * FROM {$this->setterFunctionName()}($setValues); ";
+        $data["__params"] = array_merge(empty($data['__params']) ? [] : $data['__params'], $params);
+//        $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
 
-        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
+        Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => &$data]);
     }
 
-    public function onParentSetData($args)
+    public function onParentSetData(&$args)
     {
         if (!empty($args['data'])) {
             $this->setData($args['data']);

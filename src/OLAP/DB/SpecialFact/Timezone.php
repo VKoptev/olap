@@ -41,7 +41,7 @@ class Timezone extends Fact {
         return $this->getDimension($this->object()->getSpecialDimension());
     }
 
-    public function setData(array $data) {
+    public function setData(array &$data) {
 
         $currentTZ = date_default_timezone_get();
         date_default_timezone_set("UTC");
@@ -63,7 +63,9 @@ class Timezone extends Fact {
         }
 
         $values = implode(', ', $values);
-        $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
+//        $data["{$this->getTableName()}_id"] = $this->db()->fetchColumn("SELECT * FROM {$this->setterFunctionName()}($values)", $params);
+        $data["__sql"][] = "SELECT * FROM {$this->setterFunctionName()}($values); ";
+        $data["__params"] = array_merge(empty($data['__params']) ? [] : $data['__params'], $params);
 
         Event\Ruler::getInstance()->trigger(Event\Type::EVENT_SET_DATA, $this->getTableName(), ['data' => $data]);
 

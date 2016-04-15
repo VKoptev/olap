@@ -35,7 +35,7 @@ class Server {
 
     public function setData(array $data) {
 
-        $this->cube->setData($data);
+        return $this->cube->setData($data);
     }
 
     public function truncate() {
